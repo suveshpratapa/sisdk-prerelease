@@ -48,6 +48,20 @@ void MeshForwarder::SendMessage(OwnedPtr<Message> aMessagePtr)
     message.SetOffset(0);
     message.SetDatagramTag(0);
     message.SetTimestampToNow();
+
+#if FEATURE_TIMESYNCSERVICE_ENABLE
+    if (ot::TimeSyncService::TimeSyncService::isTimeSyncPacket(message))
+    {
+        message.SetTxTimestampEnabled(true);
+        LogDebg("SendMessage:: Handling Time Sync Packet, frame_rx_time = %llu, time stamp enabled %d", 
+            message.GetRadioTime(), message.IsTxTimestampEnabled());
+
+        #if OPENTHREAD_CONFIG_MULTI_RADIO
+            message.SetRadioType(ot::Mac::kRadioTypeIeee802154);
+        #endif
+    }
+#endif
+
     mSendQueue.Enqueue(message);
 
     switch (message.GetType())
