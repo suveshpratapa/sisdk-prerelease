@@ -29,4 +29,10 @@ Copyright (c) 2025 Apple Inc. All Rights Reserved.
     #define FEATURE_TIMESYNCSERVICE_ENABLE 1
 #endif
 
+/* newlib-nano compatibility: C89 printf does not support %llu, %lld. Use hex format. */
+#define TSS_U64_HEX_FMT "0x%08lx%08lx"
+#define TSS_U64_HEX_ARGS(v) (unsigned long)((uint64_t)(v) >> 32), (unsigned long)((uint64_t)(v) & 0xFFFFFFFFUL)
+#define TSS_I64_HEX_FMT "0x%08lx%08lx"
+#define TSS_I64_HEX_ARGS(v) (unsigned long)((uint64_t)(v) >> 32), (unsigned long)((uint64_t)(v) & 0xFFFFFFFFUL)
+
 #endif

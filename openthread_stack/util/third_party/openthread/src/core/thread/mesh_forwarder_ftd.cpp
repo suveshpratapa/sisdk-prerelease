@@ -53,8 +53,8 @@ void MeshForwarder::SendMessage(OwnedPtr<Message> aMessagePtr)
     if (ot::TimeSyncService::TimeSyncService::isTimeSyncPacket(message))
     {
         message.SetTxTimestampEnabled(true);
-        LogDebg("SendMessage:: Handling Time Sync Packet, frame_rx_time = %llu, time stamp enabled %d", 
-            message.GetRadioTime(), message.IsTxTimestampEnabled());
+        LogDebg("SendMessage:: Handling Time Sync Packet, frame_rx_time = " TSS_U64_HEX_FMT ", time stamp enabled %d",
+            TSS_U64_HEX_ARGS(message.GetRadioTime()), message.IsTxTimestampEnabled());
 
         #if OPENTHREAD_CONFIG_MULTI_RADIO
             message.SetRadioType(ot::Mac::kRadioTypeIeee802154);

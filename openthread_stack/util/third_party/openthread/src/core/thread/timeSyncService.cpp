@@ -263,8 +263,8 @@ void TimeSyncService::HandleTimeSyncPacketRequest(otMessage *aMessage, const otM
     LogDebg("TSS HandleTimeSyncPacketRequest: trying to reply TIMESYNC_PACKET, clientSeqNum = %d, serverSeqNum = %d",
         timeSyncMessage.clientSeqNum,
         timeSyncMessage.serverSeqNum);
-    LogDebg("TSS HandleTimeSyncPacketRequest: current_timestamp_at_server = %llu",
-        current_timestamp_at_server);
+    LogDebg("TSS HandleTimeSyncPacketRequest: current_timestamp_at_server = " TSS_U64_HEX_FMT,
+        TSS_U64_HEX_ARGS(current_timestamp_at_server));
     
     SendTimeSyncPacket(responsedBuf, responseBufLength, aMessageInfo);
 }
@@ -340,8 +340,8 @@ void TimeSyncService::HandleTimeSyncPacketAck(otMessage *aMessage, const otMessa
         timeSyncServerHistory[server_history_index].e2e_error = e2e_error;
         timeSyncServerHistory[server_history_index].client_drift_in_ppm = timeSyncAckMessage.client_drift_in_ppm;
     
-        LogDebg("TSS HandleTimeSyncPacketAck: client_ts=%llu, offset=%ld, radioDelay=%lu",
-            client_timestamp, (long)timeSyncAckMessage.timeOffset, (unsigned long)radio_delay);
+        LogDebg("TSS HandleTimeSyncPacketAck: client_ts=" TSS_U64_HEX_FMT ", offset=%ld, radioDelay=%lu",
+            TSS_U64_HEX_ARGS(client_timestamp), (long)timeSyncAckMessage.timeOffset, (unsigned long)radio_delay);
         LogDebg("TSS HandleTimeSyncPacketAck: tsp_time_offset = %ld, tsp_radio_delay = %lu",
             (long)timeSyncAckMessage.tsp_timeOffset,
             (unsigned long)timeSyncAckMessage.tsp_radioDelay);
@@ -354,17 +354,17 @@ void TimeSyncService::HandleTimeSyncPacketAck(otMessage *aMessage, const otMessa
             timeSyncAckMessage.numHops,
             timeSyncAckMessage.client_drift_in_ppm);
 
-        LogDebg("TSS HandleTimeSyncPacketAck: current_timestamp_at_client = %llu, e2e_delay = %llu",
-            current_timestamp_at_client,
-            e2e_delay);
-        LogDebg("TSS HandleTimeSyncPacketAck: e2e_error = %lld, current_server_time = %llu",
-            e2e_error,
-            current_server_time);
-        LogDebg("TSS HandleTimeSyncPacketAck: prev timestamp = %llu",
-            timeSyncServerHistory[timeSyncAckMessage.serverSeqNum % TSS_SERVER_HISTORY_ARRAY_SIZE].orig_server_time);
+        LogDebg("TSS HandleTimeSyncPacketAck: current_timestamp_at_client = " TSS_U64_HEX_FMT ", e2e_delay = " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(current_timestamp_at_client),
+            TSS_U64_HEX_ARGS(e2e_delay));
+        LogDebg("TSS HandleTimeSyncPacketAck: e2e_error = " TSS_I64_HEX_FMT ", current_server_time = " TSS_U64_HEX_FMT,
+            TSS_I64_HEX_ARGS(e2e_error),
+            TSS_U64_HEX_ARGS(current_server_time));
+        LogDebg("TSS HandleTimeSyncPacketAck: prev timestamp = " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(timeSyncServerHistory[timeSyncAckMessage.serverSeqNum % TSS_SERVER_HISTORY_ARRAY_SIZE].orig_server_time));
 
-        LogDebg("TSS HandleTimeSyncPacketAck: server_client_time_delta = %lld, final_dirty_bit = %d",
-            server_client_time_delta,
+        LogDebg("TSS HandleTimeSyncPacketAck: server_client_time_delta = " TSS_I64_HEX_FMT ", final_dirty_bit = %d",
+            TSS_I64_HEX_ARGS(server_client_time_delta),
             final_dirty_bit);
         LogDebg("TSS HandleTimeSyncPacketAck: clientIpAddressString = %s",
             timeSyncServerHistory[server_history_index].clientIpAddressString);
@@ -444,21 +444,21 @@ void TimeSyncService::HandleTimeSyncPacket(otMessage *aMessage, const otMessageI
         
         client_drift_in_ppm = (server_time_delta_sec)? (int16_t)(client_time_delta_us/server_time_delta_sec): 0;
         
-        LogDebg("TSS HandleTimeSyncPacket: Drift Calc Base Values - current_client_time: %llu",
-            current_client_time);
-        LogDebg("TSS HandleTimeSyncPacket: Drift Calc Base Values - current_timestamp_at_server: %llu",
-            current_timestamp_at_server);
+        LogDebg("TSS HandleTimeSyncPacket: Drift Calc Base Values - current_client_time: " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(current_client_time));
+        LogDebg("TSS HandleTimeSyncPacket: Drift Calc Base Values - current_timestamp_at_server: " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(current_timestamp_at_server));
 
-        LogDebg("TSS HandleTimeSyncPacket: Drift Calc Base Values - last_timestamp_at_client: %llu",
-            last_timestamp_at_client);
-        LogDebg("TSS HandleTimeSyncPacket: Drift Calc Base Values - last_timestamp_at_server: %llu",
-            last_timestamp_at_server);
+        LogDebg("TSS HandleTimeSyncPacket: Drift Calc Base Values - last_timestamp_at_client: " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(last_timestamp_at_client));
+        LogDebg("TSS HandleTimeSyncPacket: Drift Calc Base Values - last_timestamp_at_server: " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(last_timestamp_at_server));
         
-        LogDebg("TSS HandleTimeSyncPacket: Drift Calc - client_time_delta_us: %llu",
-            client_time_delta_us);
-        LogDebg("TSS HandleTimeSyncPacket: Drift Calc - server_time_delta_sec: %llu, client_drift_in_ppm: %hd",
-            server_time_delta_sec,
-            client_drift_in_ppm);
+        LogDebg("TSS HandleTimeSyncPacket: Drift Calc - client_time_delta_us: " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(client_time_delta_us));
+        LogDebg("TSS HandleTimeSyncPacket: Drift Calc - server_time_delta_sec: " TSS_U64_HEX_FMT ", client_drift_in_ppm: %d",
+            TSS_U64_HEX_ARGS(server_time_delta_sec),
+            (int)client_drift_in_ppm);
     }
     last_timestamp_at_server = current_timestamp_at_server;
     last_timestamp_at_client = current_client_time;
@@ -472,19 +472,19 @@ void TimeSyncService::HandleTimeSyncPacket(otMessage *aMessage, const otMessageI
     timeSyncClientHistory[client_history_index].current_client_time = current_client_time;
     timeSyncClientHistory[client_history_index].calculated_server_time = current_timestamp_at_server;
     
-    LogDebg("TSS HandleTimeSyncPacket: server_timestamp = %llu, timeOffset = %ld, RxRadioDelay = %lu",
-        server_timestamp,
+    LogDebg("TSS HandleTimeSyncPacket: server_timestamp = " TSS_U64_HEX_FMT ", timeOffset = %ld, RxRadioDelay = %lu",
+        TSS_U64_HEX_ARGS(server_timestamp),
         (long)timeSyncMessage.timeOffset,
         (unsigned long)radio_delay);
     LogDebg("TSS HandleTimeSyncPacket: RLOC16 = 0x%x, RLOC16 in packet = 0x%x",
         dst_rloc16,
         timeSyncMessage.rloc16);
         
-    LogDebg("TSS HandleTimeSyncPacket: current_timestamp_at_server = %llu, final_dirty_bit = %d",
-        current_timestamp_at_server,
+    LogDebg("TSS HandleTimeSyncPacket: current_timestamp_at_server = " TSS_U64_HEX_FMT ", final_dirty_bit = %d",
+        TSS_U64_HEX_ARGS(current_timestamp_at_server),
         final_dirty_bit);
-    LogDebg("TSS HandleTimeSyncPacket: client_server_time_delta = %lld, numHops = %d",
-        client_server_time_delta,
+    LogDebg("TSS HandleTimeSyncPacket: client_server_time_delta = " TSS_I64_HEX_FMT ", numHops = %d",
+        TSS_I64_HEX_ARGS(client_server_time_delta),
         timeSyncMessage.numHops);
     LogDebg("TSS HandleTimeSyncPacket: serverIpAddressString = %s",
         timeSyncClientHistory[client_history_index].serverIpAddressString);
@@ -494,7 +494,7 @@ void TimeSyncService::HandleTimeSyncPacket(otMessage *aMessage, const otMessageI
 
     LogInfo("TSS HandleTimeSyncPacket: trying to reply TIMESYNC_PACKET_ACK, clientSeqNum = %d, serverSeqNum = %d",
         timeSyncAck.clientSeqNum, timeSyncAck.serverSeqNum);
-    LogDebg("TSS HandleTimeSyncPacket: current_client_time = %llu", current_client_time);
+    LogDebg("TSS HandleTimeSyncPacket: current_client_time = " TSS_U64_HEX_FMT, TSS_U64_HEX_ARGS(current_client_time));
     
     SendTimeSyncPacket(responsedBuf, responseBufLength, aMessageInfo);
 }
@@ -562,8 +562,8 @@ void TimeSyncService::HandleUdpReceive(otMessage *aMessage, const otMessageInfo 
     
     // Validate buffer length
     if (receivedBufLength < TIMESYNC_MSG_TYPE_OFFSET || receivedBufLength >= sizeof(receivedBuf)) {
-        LogWarn("TSS HandleUdpReceive: Invalid buffer length %u, valid range [%d, %zu)", 
-                     receivedBufLength, TIMESYNC_MSG_TYPE_OFFSET, sizeof(receivedBuf));
+        LogWarn("TSS HandleUdpReceive: Invalid buffer length %u, valid range [%d, %lu)",
+                     receivedBufLength, TIMESYNC_MSG_TYPE_OFFSET, (unsigned long)sizeof(receivedBuf));
         return;
     }
     
@@ -597,8 +597,8 @@ void TimeSyncService::HandleUdpReceive(otMessage *aMessage, const otMessageInfo 
         
         if(receivedBufLength != sizeof(TimeSyncPacketRequest))
         {
-            LogWarn("TSS HandleUdpReceive: wrong message length (%d) for TIMESYNC_PACKET_REQUEST (%zu)",
-                receivedBufLength, sizeof(TimeSyncPacketRequest));
+            LogWarn("TSS HandleUdpReceive: wrong message length (%d) for TIMESYNC_PACKET_REQUEST (%lu)",
+                receivedBufLength, (unsigned long)sizeof(TimeSyncPacketRequest));
             return;
         }
 
@@ -613,8 +613,8 @@ void TimeSyncService::HandleUdpReceive(otMessage *aMessage, const otMessageInfo 
         
         if(receivedBufLength != sizeof(TimeSyncPacketAck))
         {
-            LogInfo("TSS HandleUdpReceive: wrong message length (%d) for TIMESYNC_PACKET_ACK (%zu)",
-                receivedBufLength, sizeof(TimeSyncPacketAck));
+            LogInfo("TSS HandleUdpReceive: wrong message length (%d) for TIMESYNC_PACKET_ACK (%lu)",
+                receivedBufLength, (unsigned long)sizeof(TimeSyncPacketAck));
             return;
         }
 
@@ -628,8 +628,8 @@ void TimeSyncService::HandleUdpReceive(otMessage *aMessage, const otMessageInfo 
         
         if(receivedBufLength != sizeof(TimeSyncPacket))
         {
-            LogInfo("TSS HandleUdpReceive: wrong message length (%d) for TIMESYNC_PACKET (%zu)",
-                receivedBufLength, sizeof(TimeSyncPacket));
+            LogInfo("TSS HandleUdpReceive: wrong message length (%d) for TIMESYNC_PACKET (%lu)",
+                receivedBufLength, (unsigned long)sizeof(TimeSyncPacket));
             return;
         }
 
@@ -937,15 +937,15 @@ void TimeSyncService::CalculateRadioDelay(const uint8_t * aFrame, uint16_t aFram
     {
         ota_delay = timeSyncOTATimeStamp.f2ota_timeStamp - timeSyncOTATimeStamp.h2f_timeStamp;
         
-        LogDebg("TSS CalculateRadioDelay %s: OTA Delay = %llu, f2ota_timeStamp = %lu",
-            aLogContext, ota_delay, (unsigned long)timeSyncOTATimeStamp.f2ota_timeStamp);
+        LogDebg("TSS CalculateRadioDelay %s: OTA Delay = " TSS_U64_HEX_FMT ", f2ota_timeStamp = %lu",
+            aLogContext, TSS_U64_HEX_ARGS(ota_delay), (unsigned long)timeSyncOTATimeStamp.f2ota_timeStamp);
         LogDebg("TSS CalculateRadioDelay %s: h2f_timeStamp = %lu, timeOffset = %ld",
             aLogContext, (unsigned long)timeSyncOTATimeStamp.h2f_timeStamp, (long)timeSyncOTATimeStamp.timeOffset);
     }
     else {
         LogDebg("TSS CalculateRadioDelay %s: f2ota_timeStamp = %lu smaller than h2f_timeStamp = %lu",
             aLogContext, (unsigned long)timeSyncOTATimeStamp.f2ota_timeStamp, (unsigned long)timeSyncOTATimeStamp.h2f_timeStamp);
-        LogDebg("TSS CalculateRadioDelay %s: OTA Delay = %llu", aLogContext, ota_delay);
+        LogDebg("TSS CalculateRadioDelay %s: OTA Delay = " TSS_U64_HEX_FMT, aLogContext, TSS_U64_HEX_ARGS(ota_delay));
     }
 
     uint64_t frame_rx_time;
@@ -957,8 +957,8 @@ void TimeSyncService::CalculateRadioDelay(const uint8_t * aFrame, uint16_t aFram
 
     radio_delay = f2h_radio_delay + (uint32_t)ota_delay;
 
-    LogDebg("TSS CalculateRadioDelay %s: f2h_radio_delay: %ld, ota_delay = %lld",
-        aLogContext, (long)f2h_radio_delay, ota_delay);
+    LogDebg("TSS CalculateRadioDelay %s: f2h_radio_delay: %ld, ota_delay = " TSS_U64_HEX_FMT,
+        aLogContext, (long)f2h_radio_delay, TSS_U64_HEX_ARGS(ota_delay));
     LogDebg("TSS CalculateRadioDelay %s: radio_delay = %ld", aLogContext, (long)radio_delay);
 }
 
@@ -1043,15 +1043,15 @@ void TimeSyncService::HandleTimeSyncFrame(ot::Mac::TxFrame &aFrame)
         packet_h2f_timeStamp = timeSyncPacketAck.h2f_timeStamp;
     }
 
-    LogDebg("TSS HandleTimeSyncFrame: MAC Payload: packetType = %d, timeStamp = %llu",
-        packetType, timeStamp);
+    LogDebg("TSS HandleTimeSyncFrame: MAC Payload: packetType = %d, timeStamp = " TSS_U64_HEX_FMT,
+        packetType, TSS_U64_HEX_ARGS(timeStamp));
     LogDebg("TSS HandleTimeSyncFrame: MAC Payload: is Dirty = %d, current Time Offset = %ld",
         current_dirty_bit, (long)delay);
         
     LogDebg("TSS HandleTimeSyncFrame: MAC Payload: src_addr = 0x%x, dst_addr = 0x%x",
         src_rloc16, dst_rloc16);
-    LogDebg("TSS HandleTimeSyncFrame: MAC Payload: rloc16_in_payload = 0x%x, radio_time_stamp = %llu",
-        current_rloc16_in_payload, aFrame.GetRxRadioTimestampForForwardingPacket());
+    LogDebg("TSS HandleTimeSyncFrame: MAC Payload: rloc16_in_payload = 0x%x, radio_time_stamp = " TSS_U64_HEX_FMT,
+        current_rloc16_in_payload, TSS_U64_HEX_ARGS(aFrame.GetRxRadioTimestampForForwardingPacket()));
 
     //Dirty Bit
     if((current_rloc16_in_payload == 0x0000) || ((current_dirty_bit == 0x00) && (current_rloc16_in_payload == src_rloc16)))
@@ -1078,8 +1078,8 @@ void TimeSyncService::HandleTimeSyncFrame(ot::Mac::TxFrame &aFrame)
             radio_delay = (uint32_t)(radio_time_now - frame_rx_time);
         }
         else {
-            LogDebg("TSS HandleTimeSyncFrame: Radio delay < 0, frame_rx_time = %llu", frame_rx_time);
-            LogDebg("TSS HandleTimeSyncFrame: radio_time_now = %llu", radio_time_now);
+            LogDebg("TSS HandleTimeSyncFrame: Radio delay < 0, frame_rx_time = " TSS_U64_HEX_FMT, TSS_U64_HEX_ARGS(frame_rx_time));
+            LogDebg("TSS HandleTimeSyncFrame: radio_time_now = " TSS_U64_HEX_FMT, TSS_U64_HEX_ARGS(radio_time_now));
         }
         
         //OTA Delay
@@ -1088,20 +1088,20 @@ void TimeSyncService::HandleTimeSyncFrame(ot::Mac::TxFrame &aFrame)
             ota_delay = (uint32_t)(packet_f2ota_timeStamp - packet_h2f_timeStamp);
         }
         else {
-            LogDebg("TSS HandleTimeSyncFrame: OTA delay < 0, packet_f2ota_timeStamp = %llu",
-                packet_f2ota_timeStamp);
-            LogDebg("TSS HandleTimeSyncFrame: packet_h2f_timeStamp = %llu", packet_h2f_timeStamp);
+            LogDebg("TSS HandleTimeSyncFrame: OTA delay < 0, packet_f2ota_timeStamp = " TSS_U64_HEX_FMT,
+                TSS_U64_HEX_ARGS(packet_f2ota_timeStamp));
+            LogDebg("TSS HandleTimeSyncFrame: packet_h2f_timeStamp = " TSS_U64_HEX_FMT, TSS_U64_HEX_ARGS(packet_h2f_timeStamp));
         }
         
         delay = delay + radio_delay + ota_delay;
         
-        LogDebg("TSS HandleTimeSyncFrame: OTA delay + Hops, frame_rx_time = %llu, radio_time_now = %llu",
-            frame_rx_time, radio_time_now);
-        LogDebg("TSS HandleTimeSyncFrame: OTA+Hops, h2f_ts=%llu, f2ota_ts=%llu",
-            h2f_timeStamp, packet_f2ota_timeStamp);
+        LogDebg("TSS HandleTimeSyncFrame: OTA delay + Hops, frame_rx_time = " TSS_U64_HEX_FMT ", radio_time_now = " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(frame_rx_time), TSS_U64_HEX_ARGS(radio_time_now));
+        LogDebg("TSS HandleTimeSyncFrame: OTA+Hops, h2f_ts=" TSS_U64_HEX_FMT ", f2ota_ts=" TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(h2f_timeStamp), TSS_U64_HEX_ARGS(packet_f2ota_timeStamp));
 
-        LogDebg("TSS HandleTimeSyncFrame: OTA delay + Hops, packet_h2f_timeStamp = %llu",
-            packet_h2f_timeStamp);
+        LogDebg("TSS HandleTimeSyncFrame: OTA delay + Hops, packet_h2f_timeStamp = " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(packet_h2f_timeStamp));
         LogDebg("TSS HandleTimeSyncFrame: OTA delay + Hops, radio_delay = %ld, OTA Delay = %lu",
             (long)radio_delay, (unsigned long)ota_delay);
         LogDebg("TSS HandleTimeSyncFrame: OTA delay + Hops, delay = %ld, numHops = %d",
@@ -1123,15 +1123,15 @@ void TimeSyncService::HandleTimeSyncFrame(ot::Mac::TxFrame &aFrame)
         
         delay += host_delay;
         
-        LogDebg("TSS HandleTimeSyncFrame: After applying host delay, original host time = %llu",
-            timeStamp);
-        LogDebg("TSS HandleTimeSyncFrame: After applying host delay, current host time = %llu",
-            current_host_time);
+        LogDebg("TSS HandleTimeSyncFrame: After applying host delay, original host time = " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(timeStamp));
+        LogDebg("TSS HandleTimeSyncFrame: After applying host delay, current host time = " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(current_host_time));
 
-        LogDebg("TSS HandleTimeSyncFrame: After applying host delay, radio_time_now = %llu",
-            radio_time_now);
-        LogDebg("TSS HandleTimeSyncFrame: After applying host delay, h2f_timeStamp = %llu",
-            h2f_timeStamp);
+        LogDebg("TSS HandleTimeSyncFrame: After applying host delay, radio_time_now = " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(radio_time_now));
+        LogDebg("TSS HandleTimeSyncFrame: After applying host delay, h2f_timeStamp = " TSS_U64_HEX_FMT,
+            TSS_U64_HEX_ARGS(h2f_timeStamp));
 
         LogDebg("TSS HandleTimeSyncFrame: After applying host delay, host_delay = %ld, delay = %ld",
             (long)host_delay, (long)delay);
@@ -1407,14 +1407,14 @@ char *TimeSyncService::GetTimeSyncServerHistory(void) {
             strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  TSP host_delay: %lu us\n", (unsigned long)tss_ServerHistory[idx].tsp_host_delay);
             strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  TSP dirty_bit: %u us\n", tss_ServerHistory[idx].tsp_dirty_bit);
             strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  TSP numHops: %u us\n", tss_ServerHistory[idx].tsp_numHops);
-            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  E2E Delay: %llu us\n", tss_ServerHistory[idx].e2e_delay);
-            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  E2E Time Sync Error: %lld us\n", tss_ServerHistory[idx].e2e_error);
-            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  clientTimeStamp: %llu us\n", tss_ServerHistory[idx].clientTimeStamp);
-            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  server_client_time_delta: %lld us\n", tss_ServerHistory[idx].server_client_time_delta);
-            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  orig_server_time: %llu us\n", tss_ServerHistory[idx].orig_server_time);
-            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  current_server_time: %llu us\n", tss_ServerHistory[idx].current_server_time);
-            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  calculated_client_time: %llu us\n", tss_ServerHistory[idx].calculated_client_time);
-            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  client_drift_in_ppm: %hd ppm\n", tss_ServerHistory[idx].client_drift_in_ppm);
+            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  E2E Delay: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ServerHistory[idx].e2e_delay));
+            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  E2E Time Sync Error: " TSS_I64_HEX_FMT " us\n", TSS_I64_HEX_ARGS(tss_ServerHistory[idx].e2e_error));
+            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  clientTimeStamp: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ServerHistory[idx].clientTimeStamp));
+            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  server_client_time_delta: " TSS_I64_HEX_FMT " us\n", TSS_I64_HEX_ARGS(tss_ServerHistory[idx].server_client_time_delta));
+            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  orig_server_time: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ServerHistory[idx].orig_server_time));
+            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  current_server_time: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ServerHistory[idx].current_server_time));
+            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  calculated_client_time: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ServerHistory[idx].calculated_client_time));
+            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  client_drift_in_ppm: %d ppm\n", (int)tss_ServerHistory[idx].client_drift_in_ppm);
             strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  clientIpAddress: %s\n", tss_ServerHistory[idx].clientIpAddressString);
             strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "Server History Item : %d END]\n", idx);
         }
@@ -1443,14 +1443,14 @@ char *TimeSyncService::GetTimeSyncServerHistory(uint8_t idx) {
         strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  TSP host_delay: %lu us\n", (unsigned long)tss_ServerHistory[idx].tsp_host_delay);
         strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  TSP dirty_bit: %u us\n", tss_ServerHistory[idx].tsp_dirty_bit);
         strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  TSP numHops: %u us\n", tss_ServerHistory[idx].tsp_numHops);
-        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  E2E Delay: %llu us\n", tss_ServerHistory[idx].e2e_delay);
-        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  E2E Time Sync Error: %lld us\n", tss_ServerHistory[idx].e2e_error);
-        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  clientTimeStamp: %llu us\n", tss_ServerHistory[idx].clientTimeStamp);
-        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  server_client_time_delta: %lld us\n", tss_ServerHistory[idx].server_client_time_delta);
-        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  orig_server_time: %llu us\n", tss_ServerHistory[idx].orig_server_time);
-        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  current_server_time: %llu us\n", tss_ServerHistory[idx].current_server_time);
-        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  calculated_client_time: %llu us\n", tss_ServerHistory[idx].calculated_client_time);
-        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  client_drift_in_ppm: %hd ppm\n", tss_ServerHistory[idx].client_drift_in_ppm);
+        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  E2E Delay: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ServerHistory[idx].e2e_delay));
+        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  E2E Time Sync Error: " TSS_I64_HEX_FMT " us\n", TSS_I64_HEX_ARGS(tss_ServerHistory[idx].e2e_error));
+        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  clientTimeStamp: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ServerHistory[idx].clientTimeStamp));
+        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  server_client_time_delta: " TSS_I64_HEX_FMT " us\n", TSS_I64_HEX_ARGS(tss_ServerHistory[idx].server_client_time_delta));
+        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  orig_server_time: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ServerHistory[idx].orig_server_time));
+        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  current_server_time: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ServerHistory[idx].current_server_time));
+        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  calculated_client_time: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ServerHistory[idx].calculated_client_time));
+        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  client_drift_in_ppm: %d ppm\n", (int)tss_ServerHistory[idx].client_drift_in_ppm);
         strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  clientIpAddress: %s\n", tss_ServerHistory[idx].clientIpAddressString);
         strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "Server History Item : %d END]\n", idx);
     }
@@ -1475,10 +1475,10 @@ char *TimeSyncService::getTimeSyncClientHistory(void) {
             strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  timeOffset: %lu us\n", (unsigned long)tss_ClientHistory[idx].timeOffset);
             strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  radioDelay: %lu us\n", (unsigned long)tss_ClientHistory[idx].radioDelay);
             strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  host_delay: %lu us\n", (unsigned long)tss_ClientHistory[idx].host_delay);
-            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  serverTimeStamp: %llu us\n", tss_ClientHistory[idx].serverTimeStamp);
-            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  client_server_time_delta: %lld us\n", tss_ClientHistory[idx].client_server_time_delta);
-            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  current_client_time: %llu us\n", tss_ClientHistory[idx].current_client_time);
-            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  calculated_server_time: %llu us\n", tss_ClientHistory[idx].calculated_server_time);
+            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  serverTimeStamp: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ClientHistory[idx].serverTimeStamp));
+            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  client_server_time_delta: " TSS_I64_HEX_FMT " us\n", TSS_I64_HEX_ARGS(tss_ClientHistory[idx].client_server_time_delta));
+            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  current_client_time: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ClientHistory[idx].current_client_time));
+            strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  calculated_server_time: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ClientHistory[idx].calculated_server_time));
             strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  serverIpAddress: %s\n", tss_ClientHistory[idx].serverIpAddressString);
             strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "Client History Item : %d END]\n", idx);
         }
@@ -1502,10 +1502,10 @@ char *TimeSyncService::getTimeSyncClientHistory(uint8_t idx) {
         strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  timeOffset: %lu us\n", (unsigned long)tss_ClientHistory[idx].timeOffset);
         strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  radioDelay: %lu us\n", (unsigned long)tss_ClientHistory[idx].radioDelay);
         strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  host_delay: %lu us\n", (unsigned long)tss_ClientHistory[idx].host_delay);
-        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  serverTimeStamp: %llu us\n", tss_ClientHistory[idx].serverTimeStamp);
-        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  client_server_time_delta: %lld us\n", tss_ClientHistory[idx].client_server_time_delta);
-        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  current_client_time: %llu us\n", tss_ClientHistory[idx].current_client_time);
-        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  calculated_server_time: %llu us\n", tss_ClientHistory[idx].calculated_server_time);
+        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  serverTimeStamp: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ClientHistory[idx].serverTimeStamp));
+        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  client_server_time_delta: " TSS_I64_HEX_FMT " us\n", TSS_I64_HEX_ARGS(tss_ClientHistory[idx].client_server_time_delta));
+        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  current_client_time: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ClientHistory[idx].current_client_time));
+        strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  calculated_server_time: " TSS_U64_HEX_FMT " us\n", TSS_U64_HEX_ARGS(tss_ClientHistory[idx].calculated_server_time));
         strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "  serverIpAddress: %s\n", tss_ClientHistory[idx].serverIpAddressString);
         strCnt += snprintf(tss_history + strCnt, sizeof(tss_history) - strCnt, "Client History Item : %d END]\n", idx);
     }
