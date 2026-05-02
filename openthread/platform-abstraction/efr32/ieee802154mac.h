@@ -58,12 +58,10 @@
 // 802.15.4E-2012 introduced MultiPurpose with different Frame Control Field
 // layout described in the MultiPurpose section below.
 #define IEEE802154_FRAME_TYPE_MULTIPURPOSE ((uint16_t)0x0005U) // MultiPurpose
-#define IEEE802154_FRAME_TYPE_RESERVED_1 ((uint16_t)0x0004U)
-#define IEEE802154_FRAME_TYPE_RESERVED_2 ((uint16_t)0x0006U)
-#define IEEE802154_FRAME_TYPE_RESERVED_3 ((uint16_t)0x0007U)
-#define IEEE802154_FRAME_TYPE_MASK ((uint16_t)0x0007U) // Bits 0..2
-// Use a reserved flag internally to check whether outgoing enh-ACK was secure
-#define IEEE802154_SECURED_OUTGOING_ENHANCED_ACK IEEE802154_FRAME_TYPE_RESERVED_1
+#define IEEE802154_FRAME_TYPE_RESERVED_1 ((uint16_t)0x0004U)   // Don't use when Multipurpose frame support is enabled.
+#define IEEE802154_FRAME_TYPE_RESERVED_2 ((uint16_t)0x0006U)   // Don't use when Multipurpose frame support is enabled.
+#define IEEE802154_FRAME_TYPE_RESERVED_3 ((uint16_t)0x0007U)   // Don't use when Multipurpose frame support is enabled.
+#define IEEE802154_FRAME_TYPE_MASK ((uint16_t)0x0007U)         // Bits 0..2
 
 #define IEEE802154_FRAME_FLAG_SECURITY_ENABLED ((uint16_t)0x0008U) // Bit 3
 #define IEEE802154_FRAME_FLAG_FRAME_PENDING ((uint16_t)0x0010U)    // Bit 4
@@ -72,8 +70,7 @@
 // 802.15.4-2006 renamed the Intra-Pan flag PanId-Compression
 #define IEEE802154_FRAME_FLAG_PANID_COMPRESSION IEEE802154_FRAME_FLAG_INTRA_PAN
 #define IEEE802154_FRAME_FLAG_RESERVED ((uint16_t)0x0080U) // Bit 7 reserved
-// Use the reserved flag internally to check whether frame pending bit was set in outgoing ACK
-#define IEEE802154_FRAME_PENDING_SET_IN_OUTGOING_ACK IEEE802154_FRAME_FLAG_RESERVED
+
 // 802.15.4E-2012 introduced these flags for Frame Version 2 frames
 // which are reserved bit positions in earlier Frame Version frames:
 #define IEEE802154_FRAME_FLAG_SEQ_SUPPRESSION ((uint16_t)0x0100U) // Bit 8

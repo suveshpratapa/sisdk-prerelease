@@ -145,6 +145,7 @@ using rxPacketDetails = struct
     uint8_t        lqi;
     int8_t         rssi;
     otInstance    *instance;
+    uint8_t        dataReqFlags;
     sl_rail_time_t timestamp;
 };
 
@@ -199,6 +200,18 @@ extern struct efr32RadioCounters railDebugCounters;
 
 #define SHR_DURATION_US 160
 
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+#define USEC_PER_SYMBOL_2_4_GHZ 16
+#define SYMBOL_PER_BYTE_2_4_GHZ 2
+// PREAMBLE_PLUS_SYNC_WORD_BYTES (5) + PHY LEN (1) + FC (2) + SEQ (1) + DEST_PAN (2) + DEST (8) + SRC (8) + AUX SECURITY
+// (10) + HEADER IE (2) + RENDEZVOUS TIME IE (2) + CONNECTION IE (7) + MiC (4) + CRC (2)
+#define WAKEUP_FRAME_MAX_LENGTH 54
+#define WAKEUP_FRAME_TX_TIME_IN_US (WAKEUP_FRAME_MAX_LENGTH * USEC_PER_SYMBOL_2_4_GHZ * SYMBOL_PER_BYTE_2_4_GHZ)
+#endif // OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+
+#define FLAG_SECURED_OUTGOING_ENHANCED_ACK ((uint8_t)0x01U)
+#define FLAG_FRAME_PENDING_SET_IN_OUTGOING_ACK ((uint8_t)0x02U)
+
 #ifdef SL_CATALOG_RAIL_UTIL_COEX_PRESENT
 enum
 {
@@ -212,6 +225,11 @@ static uint8_t sRhoActive = RHO_INACTIVE;
 static bool    sPtaGntEventReported;
 
 #endif // SL_CATALOG_RAIL_UTIL_COEX_PRESENT
+
+// To save framePending and enhanced-ack flags from dataRequest callback
+// for last transmitted ack. This is used (see rxPacketDetails.dataReqFlags)
+// while storing the received packet in receive buffer.
+static volatile uint8_t sDataReqPktFlags;
 
 SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OT_PLATFORM_ABSTRACTION, SL_CODE_CLASS_TIME_CRITICAL)
 static bool rxPacketQueueOverflowCallback(const Queue_t *queue, void *data)
@@ -261,6 +279,42 @@ static bool isFilterMaskValid(uint8_t mask)
     return true;
 #endif
 }
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+// To set the radio Tx to Idle or Rx state transition.
+SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OT_PLATFORM_ABSTRACTION, SL_CODE_CLASS_TIME_CRITICAL)
+static inline bool setRadioTxToIdleOrRxTransition(bool aIdleState)
+{
+    sl_rail_state_transitions_t railTxStateTransit;
+    sl_rail_radio_state_t       state = aIdleState ? SL_RAIL_RF_STATE_IDLE : SL_RAIL_RF_STATE_RX;
+
+    railTxStateTransit.success = state;
+    railTxStateTransit.error   = state;
+
+    return (sl_rail_set_tx_transitions(sli_ot_radio_interface_get_rail_handle(), &railTxStateTransit)
+            == SL_RAIL_STATUS_NO_ERROR);
+}
+#endif
+
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OT_PLATFORM_ABSTRACTION, SL_CODE_CLASS_TIME_CRITICAL)
+static inline void configureRadioToAcceptMultipurposeFrames(void)
+{
+    sl_rail_status_t status;
+    sl_rail_handle_t railHandle = sli_ot_radio_interface_get_rail_handle();
+
+    // Configure RAIL to pass up wake up frames to the PAL.
+    status = sl_rail_ieee802154_accept_frames(
+        railHandle,
+        (SL_RAIL_IEEE802154_ACCEPT_STANDARD_FRAMES | SL_RAIL_IEEE802154_ACCEPT_MULTIPURPOSE_FRAMES));
+    OT_ASSERT(status == SL_RAIL_STATUS_NO_ERROR);
+
+    status = sl_rail_ieee802154_config_e_options(railHandle,
+                                                 SL_RAIL_IEEE802154_E_OPTION_GB868,
+                                                 SL_RAIL_IEEE802154_E_OPTION_GB868);
+    OT_ASSERT(status == SL_RAIL_STATUS_NO_ERROR);
+}
+#endif
 
 #if (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
 
@@ -1139,7 +1193,7 @@ SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OT_PLATFORM_ABSTRACTION, SL_CODE_CLASS_TIME_C
 static inline bool txWaitingForAck(void)
 {
     return (sli_ot_radio_state_is_tx_data_ongoing() && sCurrentTxPacket != nullptr
-            && ((sCurrentTxPacket->frame.mPsdu[0] & IEEE802154_FRAME_FLAG_ACK_REQUIRED) != 0));
+            && otMacFrameIsAckRequested(&sCurrentTxPacket->frame));
 }
 
 SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OT_PLATFORM_ABSTRACTION, SL_CODE_CLASS_TIME_CRITICAL)
@@ -1293,6 +1347,10 @@ void efr32RadioInit(void)
 
 #if OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2
     sli_ot_radio_csl_init();
+#endif
+
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    configureRadioToAcceptMultipurposeFrames();
 #endif
 
     // Initialize the queue for received packets.
@@ -1454,7 +1512,11 @@ exit:
 }
 
 #if (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
-otError otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChannel, uint32_t aStart, uint32_t aDuration)
+otError otPlatRadioReceiveAt(otInstance *aInstance,
+                             uint8_t     aChannel,
+                             uint32_t    aStart,
+                             uint32_t    aDuration,
+                             uint8_t     aSlotId)
 {
     otError error   = OT_ERROR_NONE;
     int8_t  txPower = sl_get_tx_power_for_current_channel(aInstance);
@@ -1465,6 +1527,7 @@ otError otPlatRadioReceiveAt(otInstance *aInstance, uint8_t aChannel, uint32_t a
 
     otEXPECT_ACTION(sl_ot_rtos_task_can_access_pal(), error = OT_ERROR_REJECTED);
     OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aSlotId);
 
     error = sli_ot_radio_interface_load_channel_config(aChannel, txPower);
     otEXPECT(error == OT_ERROR_NONE);
@@ -1492,6 +1555,21 @@ otError otPlatRadioTransmit(otInstance *aInstance, otRadioFrame *aFrame)
     instanceIndex_t txBufIndex = sli_ot_radio_instance_get_index(aInstance);
 
     otEXPECT_ACTION(sl_ot_rtos_task_can_access_pal(), error = OT_ERROR_REJECTED);
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    // Set Tx to idle state transition for wake-up frame since there is no mac ack request.
+    // This is to save some time from transition to Rx state for an Ack and then idle. Instead
+    // go to idle state immediately after wake-up frame transmit. After tx done, MAC code put the WC
+    // to Rx state on required channel to listen for connection request.
+    if (otMacFrameIsMultipurpose(aFrame) && !otMacFrameIsAckRequested(aFrame)
+#if OPENTHREAD_CONFIG_DIAG_ENABLE
+        && !otPlatDiagModeGet()
+#endif
+    )
+    {
+        OT_UNUSED_VARIABLE(setRadioTxToIdleOrRxTransition(true));
+    }
+#endif
 
 #if OPENTHREAD_CONFIG_MULTIPAN_RCP_ENABLE
     // Accept GP packets even if radio is not in required state.
@@ -1613,9 +1691,25 @@ void updateIeInfoTxFrame(uint32_t shrTxTime)
     otInstance *instance = sCurrentTxPacket->instance;
     if (sli_ot_radio_csl_get_period(instance) > 0 && !sCurrentTxPacket->frame.mInfo.mTxInfo.mIsHeaderUpdated)
     {
-        otMacFrameSetCslIe(&sCurrentTxPacket->frame,
-                           (uint16_t)sli_ot_radio_csl_get_period(instance),
-                           sli_ot_radio_csl_get_phase(instance, shrTxTime));
+        uint16_t phase = sli_ot_radio_csl_get_phase(instance, shrTxTime);
+        otMacFrameSetCslIe(&sCurrentTxPacket->frame, (uint16_t)sli_ot_radio_csl_get_period(instance), phase);
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+        // Update the CST IE.
+        if (sli_ot_radio_csl_get_cst_period(instance) > 0)
+        {
+            phase = sli_ot_radio_csl_get_cst_phase(instance, shrTxTime);
+        }
+        else
+        {
+            // Set CST phase and period to zero if CST period is zero and CST IE present.
+            // This is to indicate WED to detach the connection link.
+            phase = 0;
+        }
+        // This API will ignore period and phase if CST IE is not present in the MAC frame
+        // i.e. when device is not in the active enh. CSL session.
+        otMacFrameSetCstIe(&sCurrentTxPacket->frame, (uint16_t)sli_ot_radio_csl_get_cst_period(instance), phase);
+#endif
     }
 #else
     OT_UNUSED_VARIABLE(shrTxTime);
@@ -1663,7 +1757,7 @@ void txCurrentPacket(void)
         .transaction_time = 0 // will be calculated later if DMP is used
     };
 
-    ackRequested = (sCurrentTxPacket->frame.mPsdu[0] & IEEE802154_FRAME_FLAG_ACK_REQUIRED);
+    ackRequested = otMacFrameIsAckRequested(&sCurrentTxPacket->frame);
     if (ackRequested)
     {
         txOptions |= SL_RAIL_TX_OPTION_WAIT_FOR_ACK;
@@ -1757,6 +1851,12 @@ void txCurrentPacket(void)
         //
         // Note that both use single CCA config, overriding any CCA/CSMA configs from the stack
         //
+        // For Wake-up frame (from Wake-up Coordinator):
+        // mTxDelayBaseTime = 0
+        // mTxDelay = Absolute time when to start the transmission.
+        // Wakeup frame should be transmitted without CSMA/CCA attempts. We need scheduled transmit
+        // without CSMA/CCA only for transmitting the wake-up frames.
+
 #if OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2
         sl_rail_scheduled_tx_config_t scheduleTxOptions = {
             .when = sCurrentTxPacket->frame.mInfo.mTxInfo.mTxDelayBaseTime
@@ -1764,17 +1864,56 @@ void txCurrentPacket(void)
             .mode         = SL_RAIL_TIME_ABSOLUTE,
             .tx_during_rx = SL_RAIL_SCHEDULED_TX_DURING_RX_POSTPONE_TX};
 
-        // Set ccaBackoff to some constant value, so we have predictable radio warmup time for schedule tx.
-        cslCsmaConfig.cca_backoff_us = CSL_CSMA_BACKOFF_TIME_IN_US;
-        scheduleTxOptions.when -= cslCsmaConfig.cca_backoff_us;
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+        if (otMacFrameIsMultipurpose(&sCurrentTxPacket->frame))
+        {
+            // As per spec, skip the Tx if there is an overlap Rx, presumably it is a
+            // incoming parent request.
+            // But I think it should be okay to delay if it is under slip time in case of DMP.
+            sl_rail_radio_state_detail_t radioStateTransition =
+                sl_rail_get_radio_state_detail(sli_ot_radio_interface_get_rail_handle());
 
-        // CSL transmissions don't use CSMA but MAC accounts for single CCA time.
-        // cslCsmaConfig is set to SL_RAIL_CSMA_CONFIG_SINGLE_CCA above.
-        status = sli_ot_radio_interface_rail_start_scheduled_cca_csma_tx(sCurrentTxPacket->frame.mChannel,
-                                                                         txOptions,
-                                                                         &scheduleTxOptions,
-                                                                         &cslCsmaConfig,
-                                                                         &txSchedulerInfo);
+            if ((radioStateTransition == SL_RAIL_RF_STATE_DETAIL_RX_STATE)
+                || ((radioStateTransition & SL_RAIL_RF_STATE_DETAIL_IDLE_STATE) != 0U)
+                || (radioStateTransition == (SL_RAIL_RF_STATE_DETAIL_TRANSITION | SL_RAIL_RF_STATE_DETAIL_RX_STATE)))
+            {
+                txSchedulerInfo.slip_time        = OPENTHREAD_CONFIG_WED_LISTEN_DURATION - WAKEUP_FRAME_TX_TIME_IN_US;
+                txSchedulerInfo.transaction_time = WAKEUP_FRAME_TX_TIME_IN_US;
+
+                status = sl_rail_start_scheduled_tx(sli_ot_radio_interface_get_rail_handle(),
+                                                    sCurrentTxPacket->frame.mChannel,
+                                                    txOptions,
+                                                    &scheduleTxOptions,
+                                                    &txSchedulerInfo);
+            }
+            else
+            {
+                status = SL_RAIL_STATUS_INVALID_STATE;
+            }
+        }
+        else
+#endif // OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+        {
+            // Set ccaBackoff to some constant value, so we have predictable radio warmup time for schedule tx.
+            cslCsmaConfig.cca_backoff_us = CSL_CSMA_BACKOFF_TIME_IN_US;
+            scheduleTxOptions.when -= cslCsmaConfig.cca_backoff_us;
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE || OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+            // Packets can be sent with extra CCA attempts in enhanced CSL unlike regular
+            // CSL which always uses single CCA attempt.
+            cslCsmaConfig.csma_tries = (sCurrentTxPacket->frame.mInfo.mTxInfo.mExtraCcaAttempts > 1)
+                                           ? sCurrentTxPacket->frame.mInfo.mTxInfo.mExtraCcaAttempts
+                                           : 1;
+#endif
+
+            // CSL transmissions don't use CSMA but MAC accounts for single CCA time.
+            // cslCsmaConfig is set to SL_RAIL_CSMA_CONFIG_SINGLE_CCA above.
+            status = sli_ot_radio_interface_rail_start_scheduled_cca_csma_tx(sCurrentTxPacket->frame.mChannel,
+                                                                             txOptions,
+                                                                             &scheduleTxOptions,
+                                                                             &cslCsmaConfig,
+                                                                             &txSchedulerInfo);
+        }
 
         if (status == SL_RAIL_STATUS_NO_ERROR)
         {
@@ -1936,7 +2075,6 @@ static bool writeIeee802154EnhancedAck(sl_rail_handle_t          aRailHandle,
     uint8_t          linkMetricsDataLen;
     uint8_t         *dataPtr;
     bool             setFramePending;
-    uint8_t         *macFcfPointer;
     otInstance      *instance = nullptr;
     sl_rail_status_t enhAckStatus;
 
@@ -2014,22 +2152,20 @@ static bool writeIeee802154EnhancedAck(sl_rail_handle_t          aRailHandle,
         otEXPECT(sli_ot_radio_security_process_transmit(&enhAckFrame, instance) == OT_ERROR_NONE);
     }
 
-    // Before we're done, store some important info in reserved bits in the
-    // MAC header (cleared later)
+    // Before we're done, store some important info in 'dataReqPktFlags' and keep it
+    // until packet received callback occurs.
     // Check whether frame pending is set.
     // Check whether enhanced ACK is secured.
     otEXPECT((skipRxPacketLengthBytes(packetInfoForEnhAck)) == OT_ERROR_NONE);
-    macFcfPointer = ((packetInfoForEnhAck->first_portion_bytes == 0) ? packetInfoForEnhAck->p_last_portion_data
-                                                                     : packetInfoForEnhAck->p_first_portion_data);
 
     if (otMacFrameIsSecurityEnabled(&enhAckFrame))
     {
-        *macFcfPointer |= IEEE802154_SECURED_OUTGOING_ENHANCED_ACK;
+        sDataReqPktFlags |= FLAG_SECURED_OUTGOING_ENHANCED_ACK;
     }
 
     if (setFramePending)
     {
-        *macFcfPointer |= IEEE802154_FRAME_PENDING_SET_IN_OUTGOING_ACK;
+        sDataReqPktFlags |= FLAG_FRAME_PENDING_SET_IN_OUTGOING_ACK;
     }
 
     // Fill in PHR now that we know Enh-ACK's length
@@ -2068,6 +2204,9 @@ void dataRequestCommandCallback(sl_rail_handle_t aRailHandle)
     uint8_t                  initialPktReadBytes;
     sl_rail_rx_packet_info_t packetInfo;
     uint32_t                 rxCallbackTimestamp = otPlatAlarmMicroGetNow();
+
+    // Reset flags for this incoming packet's ACK handling.
+    sDataReqPktFlags = 0;
 
     // This callback occurs after the address fields of an incoming
     // ACK-requesting CMD or DATA frame have been received and we
@@ -2124,13 +2263,10 @@ void dataRequestCommandCallback(sl_rail_handle_t aRailHandle)
 
     if (framePendingSet)
     {
-        // Store whether frame pending was set in the outgoing ACK in a reserved
-        // bit of the MAC header (cleared later)
-
+        // Store whether frame pending was set in the outgoing ACK and cleared
+        // it in packet received callback.
         otEXPECT((skipRxPacketLengthBytes(&packetInfo)) == OT_ERROR_NONE);
-        uint8_t *macFcfPointer =
-            ((packetInfo.first_portion_bytes == 0) ? packetInfo.p_last_portion_data : packetInfo.p_first_portion_data);
-        *macFcfPointer |= IEEE802154_FRAME_PENDING_SET_IN_OUTGOING_ACK;
+        sDataReqPktFlags |= FLAG_FRAME_PENDING_SET_IN_OUTGOING_ACK;
     }
 
 exit:
@@ -2155,7 +2291,8 @@ void packetReceivedCallback(void)
     otInstance                 *instance          = nullptr;
     sl_status_t                 status;
     bool                        isRxPacketQueued;
-    rxBuffer                   *rxPacketBuf = nullptr;
+    rxBuffer                   *rxPacketBuf     = nullptr;
+    uint16_t                    ackRequiredMask = IEEE802154_FRAME_FLAG_ACK_REQUIRED;
 
     sl_rail_rx_packet_handle_t packetHandle =
         sli_ot_radio_interface_rail_get_rx_packet_info(SL_RAIL_RX_PACKET_HANDLE_NEWEST, &packetInfo);
@@ -2232,6 +2369,9 @@ void packetReceivedCallback(void)
     }
     else
     {
+        uint8_t dataReqPktFlagsCache = sDataReqPktFlags;
+        sDataReqPktFlags             = 0; // Clear this out for next packet
+
         otEXPECT_ACTION(sli_ot_radio_interface_get_promiscuous() || (length >= IEEE802154_MIN_DATA_LENGTH),
                         dropPacket = true);
 
@@ -2247,11 +2387,12 @@ void packetReceivedCallback(void)
         // read packet
         sli_ot_radio_interface_rail_copy_rx_packet(rxPacketBuf->psdu, &packetInfo);
 
-        rxPacketBuf->packetInfo.length    = (uint8_t)length;
-        rxPacketBuf->packetInfo.channel   = (uint8_t)packetDetails.channel;
-        rxPacketBuf->packetInfo.rssi      = packetDetails.rssi_dbm;
-        rxPacketBuf->packetInfo.lqi       = packetDetails.lqi;
-        rxPacketBuf->packetInfo.timestamp = packetDetails.time_received.packet_time;
+        rxPacketBuf->packetInfo.length       = (uint8_t)length;
+        rxPacketBuf->packetInfo.channel      = (uint8_t)packetDetails.channel;
+        rxPacketBuf->packetInfo.rssi         = packetDetails.rssi_dbm;
+        rxPacketBuf->packetInfo.lqi          = packetDetails.lqi;
+        rxPacketBuf->packetInfo.timestamp    = packetDetails.time_received.packet_time;
+        rxPacketBuf->packetInfo.dataReqFlags = dataReqPktFlagsCache;
         // Set instance to nullptr for broadcast packets in multi-instance mode, specific instance otherwise
 #if OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE
         rxPacketBuf->packetInfo.instance =
@@ -2268,7 +2409,17 @@ void packetReceivedCallback(void)
         railDebugCounters.mRailPlatRadioReceiveProcessedCount++;
 #endif
 
-        if (macFcf & IEEE802154_FRAME_FLAG_ACK_REQUIRED)
+#if OPENTHREAD_CONFIG_MAC_MULTIPURPOSE_FRAME
+        // We don't send multipurpose frame with ack request, so mark this false always for now.
+        // We would need to make to 'macFcf' to be uint16_t in order to add a proper changes to cover both
+        // multipurpose and general frame types. But following change should be okay for now as Wake-up frames
+        // are always sent without ack request.
+        ackRequiredMask = (((macFcf & IEEE802154_FRAME_TYPE_MASK) == IEEE802154_FRAME_TYPE_MULTIPURPOSE)
+                               ? 0
+                               : IEEE802154_FRAME_FLAG_ACK_REQUIRED);
+#endif
+
+        if (macFcf & ackRequiredMask)
         {
             sli_ot_radio_events_handle_phy_stack_event(
                 (sli_ot_radio_interface_rail_is_rx_auto_ack_paused()
@@ -2576,15 +2727,13 @@ static rxBuffer *prepareNextRxPacketforCb(void)
 {
     rxBuffer *rxPacketBuf = (rxBuffer *)queueRemove(&sRxPacketQueue);
     OT_ASSERT(rxPacketBuf != nullptr);
-    uint8_t *psdu = rxPacketBuf->psdu;
 
-    // Check reserved bits in MAC header for enhanced ACK security status
-    sReceive.frame.mInfo.mRxInfo.mAckedWithSecEnhAck = ((*psdu & IEEE802154_SECURED_OUTGOING_ENHANCED_ACK) != 0);
-    *psdu &= ~IEEE802154_SECURED_OUTGOING_ENHANCED_ACK;
-
-    // Check reserved bits in MAC header for frame pending status
-    sReceive.frame.mInfo.mRxInfo.mAckedWithFramePending = ((*psdu & IEEE802154_FRAME_PENDING_SET_IN_OUTGOING_ACK) != 0);
-    *psdu &= ~IEEE802154_FRAME_PENDING_SET_IN_OUTGOING_ACK;
+    // If we sent an enhanced ACK, check if it was secured.
+    sReceive.frame.mInfo.mRxInfo.mAckedWithSecEnhAck =
+        ((rxPacketBuf->packetInfo.dataReqFlags & FLAG_SECURED_OUTGOING_ENHANCED_ACK) != 0);
+    // Check whether frame pendinng bit was set in the outgoing ACK.
+    sReceive.frame.mInfo.mRxInfo.mAckedWithFramePending =
+        ((rxPacketBuf->packetInfo.dataReqFlags & FLAG_FRAME_PENDING_SET_IN_OUTGOING_ACK) != 0);
 
     sReceive.frame.mChannel = rxPacketBuf->packetInfo.channel;
     sReceive.frame.mLength  = rxPacketBuf->packetInfo.length;
@@ -2696,7 +2845,7 @@ static void processTxComplete(otInstance *aInstance)
         {
             txStatus = OT_ERROR_NONE;
 
-            if (sCurrentTxPacket->frame.mPsdu[0] & IEEE802154_FRAME_FLAG_ACK_REQUIRED)
+            if (otMacFrameIsAckRequested(&sCurrentTxPacket->frame))
             {
                 ackFrame = &sReceiveAck.frame;
             }
@@ -2737,6 +2886,14 @@ static void processTxComplete(otInstance *aInstance)
         CORE_EXIT_ATOMIC();
 #endif
         otPlatRadioTxDone(sCurrentTxPacket->instance, &sCurrentTxPacket->frame, ackFrame, txStatus);
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+        // Reset Tx-to-Rx state transition.
+        if (otMacFrameIsMultipurpose(&sCurrentTxPacket->frame))
+        {
+            OT_UNUSED_VARIABLE(setRadioTxToIdleOrRxTransition(false));
+        }
+#endif
 
 #if RADIO_CONFIG_DEBUG_COUNTERS_SUPPORT
         railDebugCounters.mRailPlatRadioTxDoneCbCount++;

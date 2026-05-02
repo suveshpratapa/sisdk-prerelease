@@ -127,7 +127,12 @@ otError sli_ot_radio_security_process_transmit(otRadioFrame *aFrame, otInstance 
     uint8_t         keyToUse;
     instanceIndex_t instanceIndex = sli_ot_radio_instance_get_index(aInstance);
 
-    otEXPECT(otMacFrameIsSecurityEnabled(aFrame) && otMacFrameIsKeyIdMode1(aFrame)
+    otEXPECT(otMacFrameIsSecurityEnabled(aFrame)
+             && (otMacFrameIsKeyIdMode1(aFrame)
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+                 || otMacFrameIsWakeupFrame(aFrame)
+#endif
+                     )
              && !aFrame->mInfo.mTxInfo.mIsSecurityProcessed);
 
     if (otMacFrameIsAck(aFrame))

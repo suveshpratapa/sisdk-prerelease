@@ -1,0 +1,7 @@
+May 1 2026:
+v0.1.0 - Initial Thread-in-Mobile release notes
+- Tagged with OpenThread SDK version "3.0.1.0-thread-in-mobile"
+- Support for Thread-in-Mobile WC/WED features showcasing eCSL functionality
+- Based on sisdk-2025.12.1 1.4.1-certifiable OpenThread stack @ GitHub-61e43cffb
+- Initial support tested for MG24 and MG26 platforms
+- Compatible with Matter-GitHub alpha located at: <TBD>

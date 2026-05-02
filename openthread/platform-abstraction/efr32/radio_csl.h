@@ -140,6 +140,43 @@ void sli_ot_radio_csl_set_sample_time(otInstance *aInstance, uint32_t aSampleTim
  */
 uint16_t sli_ot_radio_csl_get_phase(otInstance *aInstance, uint32_t aShrTxTime);
 
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+/**
+ * Set the CST period for the given instance.
+ *
+ * @param[in] aInstance  The OpenThread instance.
+ * @param[in] aPeriod    The CST period in units of 10 symbols.
+ */
+void sli_ot_radio_csl_set_cst_period(otInstance *aInstance, uint32_t aPeriod);
+
+/**
+ * Get the CST period for the given instance.
+ *
+ * @param[in] aInstance  The OpenThread instance.
+ *
+ * @return The CST period in units of 10 symbols.
+ */
+uint32_t sli_ot_radio_csl_get_cst_period(otInstance *aInstance);
+
+/**
+ * Set the CST sample time for the given instance.
+ *
+ * @param[in] aInstance      The OpenThread instance.
+ * @param[in] aSampleTime    The CST sample time.
+ */
+void sli_ot_radio_csl_set_cst_sample_time(otInstance *aInstance, uint32_t aSampleTime);
+
+/**
+ * Calculate the CST phase for the given instance.
+ *
+ * @param[in] aInstance    The OpenThread instance.
+ * @param[in] aShrTxTime   The SHR transmission time.
+ *
+ * @return The CST phase in units of 10 symbols.
+ */
+uint16_t sli_ot_radio_csl_get_cst_phase(otInstance *aInstance, uint32_t aShrTxTime);
+#endif
+
 /**
  * Generate CSL IE data for enhanced ACK.
  * This function also sets the CSL present flag based on period and source address match.

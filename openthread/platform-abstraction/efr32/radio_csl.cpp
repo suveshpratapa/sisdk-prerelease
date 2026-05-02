@@ -56,6 +56,10 @@ typedef struct
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     uint32_t period;     // CSL period in units of 10 symbols (receiver only)
     uint32_t sampleTime; // CSL sample time (receiver only)
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    uint32_t cstPeriod;     // CST period in units of 10 symbols
+    uint32_t cstSampleTime; // CST sample time
+#endif
 #endif
 } csl_state_t;
 
@@ -121,9 +125,14 @@ void sli_ot_radio_csl_set_peer_address(otInstance *aInstance, uint16_t aShortAdd
 {
     csl_state_t *state  = getCslState(aInstance);
     state->shortAddress = aShortAddress;
+
     if (aExtAddress != nullptr)
     {
         memcpy(&state->extAddress, aExtAddress, sizeof(otExtAddress));
+    }
+    else
+    {
+        memset(&state->extAddress, 0, OT_EXT_ADDRESS_SIZE);
     }
 }
 
@@ -209,6 +218,42 @@ uint16_t sli_ot_radio_csl_get_phase(otInstance *aInstance, uint32_t aShrTxTime)
     return (uint16_t)(diff / OT_US_PER_TEN_SYMBOLS);
 }
 
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+void sli_ot_radio_csl_set_cst_period(otInstance *aInstance, uint32_t aPeriod)
+{
+    csl_state_t *state = getCslState(aInstance);
+    state->cstPeriod   = aPeriod;
+}
+
+uint32_t sli_ot_radio_csl_get_cst_period(otInstance *aInstance)
+{
+    csl_state_t *state = getCslState(aInstance);
+    return state->cstPeriod;
+}
+
+void sli_ot_radio_csl_set_cst_sample_time(otInstance *aInstance, uint32_t aSampleTime)
+{
+    csl_state_t *state   = getCslState(aInstance);
+    state->cstSampleTime = aSampleTime;
+}
+
+uint16_t sli_ot_radio_csl_get_cst_phase(otInstance *aInstance, uint32_t aShrTxTime)
+{
+    csl_state_t *state         = getCslState(aInstance);
+    uint32_t     cstPeriodInUs = state->cstPeriod * OT_US_PER_TEN_SYMBOLS;
+    uint32_t     diff;
+
+    if (aShrTxTime == 0U)
+    {
+        aShrTxTime = otPlatAlarmMicroGetNow();
+    }
+
+    diff = ((state->cstSampleTime % cstPeriodInUs) - (aShrTxTime % cstPeriodInUs) + cstPeriodInUs) % cstPeriodInUs;
+
+    return (uint16_t)(diff / OT_US_PER_TEN_SYMBOLS);
+}
+#endif
+
 uint8_t sli_ot_radio_csl_generate_ack_ie_data(otInstance *aInstance, otRadioFrame *aReceivedFrame, uint8_t *aIeData)
 {
     csl_state_t *state  = getCslState(aInstance);
@@ -221,6 +266,13 @@ uint8_t sli_ot_radio_csl_generate_ack_ie_data(otInstance *aInstance, otRadioFram
     {
         offset += otMacFrameGenerateCslIeTemplate(aIeData);
     }
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    if (state->cstPeriod > 0)
+    {
+        offset += otMacFrameGenerateCstIeTemplate(aIeData + offset);
+    }
+#endif
 
     return offset;
 }
@@ -254,6 +306,15 @@ void sli_ot_radio_csl_update_enh_ack_ie(otInstance   *aInstance,
         otMacFrameSetCslIe(aEnhAckFrame,
                            (uint16_t)state->period,
                            sli_ot_radio_csl_get_phase(aInstance, ackShrDoneTime));
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+        if (state->cstPeriod > 0)
+        {
+            otMacFrameSetCstIe(aEnhAckFrame,
+                               (uint16_t)state->cstPeriod,
+                               sli_ot_radio_csl_get_cst_phase(aInstance, ackShrDoneTime));
+        }
+#endif
     }
 }
 
@@ -270,9 +331,15 @@ otError otPlatRadioEnableCsl(otInstance         *aInstance,
     otEXPECT_ACTION(sl_ot_rtos_task_can_access_pal(), error = OT_ERROR_REJECTED);
 
     OT_ASSERT(aCslPeriod < UINT16_MAX);
-    otEXPECT_ACTION((aShortAddr != OT_RADIO_BROADCAST_SHORT_ADDR) && (aShortAddr != OT_RADIO_INVALID_SHORT_ADDR),
-                    error = OT_ERROR_FAILED);
-    otEXPECT_ACTION(aExtAddr != nullptr, error = OT_ERROR_FAILED);
+
+    if (aCslPeriod == 0)
+    {
+        sli_ot_radio_csl_reset_state(aInstance);
+        ExitNow();
+    }
+
+    otEXPECT_ACTION(aShortAddr != OT_RADIO_BROADCAST_SHORT_ADDR, error = OT_ERROR_FAILED);
+    otEXPECT_ACTION((aShortAddr != OT_RADIO_INVALID_SHORT_ADDR) || (aExtAddr != nullptr), error = OT_ERROR_FAILED);
 
     sli_ot_radio_csl_set_period(aInstance, aCslPeriod);
     sli_ot_radio_csl_set_peer_address(aInstance, aShortAddr, aExtAddr);
@@ -296,5 +363,32 @@ otError otPlatRadioResetCsl(otInstance *aInstance)
 }
 
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+otError otPlatRadioEnableCst(otInstance         *aInstance,
+                             uint32_t            aCstPeriod,
+                             otShortAddress      aShortAddr,
+                             const otExtAddress *aExtAddr)
+{
+    OT_UNUSED_VARIABLE(aShortAddr);
+    OT_UNUSED_VARIABLE(aExtAddr);
+    otError error = OT_ERROR_NONE;
+
+    otEXPECT_ACTION(sl_ot_rtos_task_can_access_pal(), error = OT_ERROR_REJECTED);
+
+    sli_ot_radio_csl_set_cst_period(aInstance, aCstPeriod);
+
+exit:
+    return error;
+}
+
+void otPlatRadioUpdateCstSampleTime(otInstance *aInstance, uint32_t aCstSampleTime)
+{
+    otEXPECT(sl_ot_rtos_task_can_access_pal());
+    sli_ot_radio_csl_set_cst_sample_time(aInstance, aCstSampleTime);
+exit:
+    return;
+}
+#endif // OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
 
 #endif // OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2

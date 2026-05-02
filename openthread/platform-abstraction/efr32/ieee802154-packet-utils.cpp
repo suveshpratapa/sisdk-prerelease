@@ -394,7 +394,12 @@ otPanId efr32GetDstPanId(otRadioFrame *aFrame)
 
 uint8_t *efr32GetPayload(otRadioFrame *aFrame)
 {
-    uint8_t *payload = static_cast<Mac::RxFrame *>(aFrame)->GetPayload();
+    uint8_t *payload = NULL;
+
+    VerifyOrExit(static_cast<Mac::RxFrame *>(aFrame)->GetPayloadLength() != 0);
+    payload = static_cast<Mac::RxFrame *>(aFrame)->GetPayload();
+
+exit:
     return payload;
 }
 
