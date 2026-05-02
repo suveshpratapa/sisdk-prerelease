@@ -32,21 +32,21 @@
 #include <openthread-core-config.h>
 #include <openthread/config.h>
 
+#include <common/code_utils.hpp>
 #include <openthread/cli.h>
 #include <openthread/diag.h>
+#include <openthread/logging.h>
 #include <openthread/tasklet.h>
 #include <openthread/thread.h>
-#include <openthread/thread_ftd.h>
+#include <openthread/platform/logging.h>
 
 #include "app.h"
 #include "openthread-system.h"
 
 #include "sl_component_catalog.h"
-#include "sl_memory_manager.h"
 
 void sleepyInit(void);
 void setNetworkConfiguration(void);
-void initUdp(void);
 #ifdef SL_CATALOG_KERNEL_PRESENT
 void sl_ot_rtos_application_tick(void);
 #else
@@ -98,12 +98,21 @@ void app_init(void)
 {
     sleepyInit();
     setNetworkConfiguration();
-    initUdp();
     assert(otIp6SetEnabled(sInstance, true) == OT_ERROR_NONE);
-    assert(otThreadSetEnabled(sInstance, true) == OT_ERROR_NONE);
-#if OPENTHREAD_FTD
-    assert(otThreadBecomeLeader(sInstance) == OT_ERROR_NONE);
+
+    if (otLinkSetWakeUpListenEnabled(sInstance, true) == OT_ERROR_NONE)
+    {
+        otCliOutputFormat("Listening for wakeup frames.\r\n");
+#if OPENTHREAD_CONFIG_LOG_LEVEL_DYNAMIC_ENABLE
+        // Use lower log level. Otherwise, it would affect the
+        // schedule Rx and Tx timings, as it would add extra delays in the operations.
+        IgnoreError(otLoggingSetLevel(OT_LOG_LEVEL_WARN));
 #endif
+    }
+    else
+    {
+        assert(false);
+    }
 }
 
 /******************************************************************************
