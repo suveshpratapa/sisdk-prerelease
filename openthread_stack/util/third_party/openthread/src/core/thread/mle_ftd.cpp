@@ -419,7 +419,11 @@ void Mle::SetStateRouterOrLeader(DeviceRole aRole, uint16_t aRloc16, LeaderStart
 
     Get<ThreadNetif>().SubscribeAllRoutersMulticast();
     mPreviousPartitionIdRouter = mLeaderData.GetPartitionId();
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    Get<Mac::Mac>().SetBeaconEnabled(IsRxOnWhenIdle()); // Disable beacons for Sleepy Router
+#else
     Get<Mac::Mac>().SetBeaconEnabled(true);
+#endif
     Get<TimeTicker>().RegisterReceiver(TimeTicker::kMle);
 
     if (aRole == kRoleLeader)
@@ -526,6 +530,9 @@ void Mle::SendAdvertisement(const Ip6::Address &aDestination)
     // attaching device.
 
     VerifyOrExit(!IsAttaching());
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    VerifyOrExit(IsRxOnWhenIdle()); // Suppress MLE Advertisement for Sleepy Router
+#endif
 
     // Suppress MLE Advertisements when attempting to transition to
     // router role. Advertisements as a REED while attaching to a new
@@ -656,8 +663,10 @@ void Mle::HandleLinkRequest(RxInfo &aRxInfo)
     Log(kMessageReceive, kTypeLinkRequest, aRxInfo.mMessageInfo.GetPeerAddr());
 
     VerifyOrExit(IsRouterOrLeader(), error = kErrorInvalidState);
-
     VerifyOrExit(!IsAttaching(), error = kErrorInvalidState);
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    VerifyOrExit(IsRxOnWhenIdle(), error = kErrorInvalidState); // Ignore Link Request for Sleepy Router
+#endif
 
     SuccessOrExit(error = aRxInfo.mMessage.ReadChallengeTlv(info.mRxChallenge));
 
@@ -1171,6 +1180,10 @@ Error Mle::HandleAdvertisementOnFtd(RxInfo &aRxInfo, uint16_t aSourceAddress, co
     uint8_t  routerId;
     uint32_t delay;
 
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    VerifyOrExit(!IsWedAttaching() && !IsWedAttached(), error = kErrorDrop);
+#endif
+
     switch (aRxInfo.mMessage.ReadRouteTlv(routeTlv))
     {
     case kErrorNone:
@@ -1420,11 +1433,33 @@ void Mle::HandleParentRequest(RxInfo &aRxInfo)
 
     Log(kMessageReceive, kTypeParentRequest, aRxInfo.mMessageInfo.GetPeerAddr());
 
-    VerifyOrExit(IsRouterEligible());
-    VerifyOrExit(!IsDetached() && !IsAttaching());
+#if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_INFO) && OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    if (IsWedAttaching())
+    {
+        LogInfo("Received Parent Request FC: %lu", ToUlong(aRxInfo.mFrameCounter));
+    }
+#endif
 
+    VerifyOrExit(IsRouterEligible(), error = kErrorInvalidState);
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    // rx-on-when-idle routers handle only multicast whereas sleepy routers only unicast Parent Requests
+    VerifyOrExit(IsRxOnWhenIdle() == aRxInfo.mMessageInfo.GetSockAddr().IsMulticast(), error = kErrorInvalidState);
+#endif
+
+    // A Router/REED MUST NOT send an MLE Parent Response if:
+
+    // 0. It is detached or attempting to another partition
+    VerifyOrExit(!IsDetached() && !IsAttaching(), error = kErrorDrop);
+
+    // 1. It has no available Child capacity (if Max Child Count minus
+    // Child Count would be equal to zero)
+    // ==> verified below when allocating a child entry
+
+    // 2. It is disconnected from its Partition (that is, it has not
+    // received an updated ID sequence number within LEADER_TIMEOUT
+    // seconds)
     VerifyOrExit(!mDetacher.IsDetaching());
-
     VerifyOrExit(mRouterTable.GetLeaderAge() < mNetworkIdTimeout, error = kErrorDrop);
     VerifyOrExit(mRouterTable.GetPathCostToLeader() < kMaxRouteCost, error = kErrorDrop);
 
@@ -1469,6 +1504,27 @@ void Mle::HandleParentRequest(RxInfo &aRxInfo)
             child->SetDeviceMode(mode);
             child->SetVersion(version);
         }
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+        if (mWedAttachState == kWedAwaitParentRequest)
+        {
+            Mac::CslAccuracy cslAccuracy;
+
+            // CSL Accuracy
+            switch (aRxInfo.mMessage.ReadCslClockAccuracyTlv(cslAccuracy))
+            {
+            case kErrorNone:
+                break;
+            case kErrorNotFound:
+                cslAccuracy.Init(); // Use worst-case values if TLV is not found
+                break;
+            default:
+                ExitNow(error = kErrorParse);
+            }
+
+            Get<Mac::Mac>().SetCslParentAccuracy(cslAccuracy);
+        }
+#endif
     }
     else
     {
@@ -1483,11 +1539,38 @@ void Mle::HandleParentRequest(RxInfo &aRxInfo)
         child->SetTimeout(Time::MsecToSec(kChildIdRequestTimeout));
     }
 
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    if (mWedAttachState == kWedAwaitParentRequest)
+    {
+        mWakeupTxScheduler.Stop();
+        mWedAttachState = kWedAttached;
+        SetWed(child);
+        child->SetTimeout(Time::MsecToSec(kWakeupChildIdRequestTimeout));
+
+        if (!IsRxOnWhenIdle())
+        {
+            Get<MeshForwarder>().SetRxOnWhenIdle(false);
+        }
+
+        Get<Mac::Mac>().UpdateCsl();
+    }
+#endif
+
     aRxInfo.mClass = RxInfo::kPeerMessage;
     ProcessKeySequence(aRxInfo);
 
-    delay = GenerateRandomDelay(!ScanMaskTlv::IsEndDeviceFlagSet(scanMask) ? kParentResponseMaxDelayRouters
-                                                                           : kParentResponseMaxDelayAll);
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    if (!aRxInfo.mMessageInfo.GetSockAddr().IsMulticast())
+    {
+        delay = 0;
+    }
+    else
+#endif
+    {
+        delay = 1 + Random::NonCrypto::GetUint16InRange(0, !ScanMaskTlv::IsEndDeviceFlagSet(scanMask)
+                                                               ? kParentResponseMaxDelayRouters
+                                                               : kParentResponseMaxDelayAll);
+    }
     mDelayedSender.ScheduleParentResponse(info, delay);
 
 exit:
@@ -1617,7 +1700,10 @@ void Mle::HandleTimeTick(void)
 
     for (Child &child : Get<ChildTable>().Iterate(Child::kInStateAnyExceptInvalid))
     {
-        uint32_t timeout = 0;
+        uint32_t timeout         = 0;
+        bool     checkTimeout    = true;
+        bool     checkCslTimeout = true;
+        OT_UNUSED_VARIABLE(checkCslTimeout);
 
         switch (child.GetState())
         {
@@ -1638,16 +1724,37 @@ void Mle::HandleTimeTick(void)
         }
 
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
-        if (child.IsCslSynchronized() &&
-            TimerMilli::GetNow() - child.GetCslLastHeard() >= Time::SecToMsec(child.GetCslTimeout()))
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+        if (IsWedPresent())
         {
-            LogInfo("Child 0x%04x CSL synchronization expired", child.GetRloc16());
-            child.SetCslSynchronized(false);
-            Get<CslTxScheduler>().Update();
+            // For enhanced CSL links:
+            // - never check the CSL timeout
+            // - check the child timeout only until the child supervision mechanism is established
+            checkCslTimeout = false;
+            checkTimeout    = (child.GetSupervisionInterval() == 0);
         }
 #endif
 
-        if (TimerMilli::GetNow() - child.GetLastHeard() >= timeout)
+        if (checkCslTimeout && child.IsCslSynchronized())
+        {
+            if (TimerMilli::GetNow() - child.GetCslLastHeard() >= Time::SecToMsec(child.GetCslTimeout()))
+            {
+                LogInfo("Child 0x%04x CSL synchronization expired", child.GetRloc16());
+                child.SetCslSynchronized(false);
+                child.SetCslPrevSnValid(false);
+                Get<CslTxScheduler>().Update();
+            }
+            else
+            {
+                // Thread 1.3 specification, section 4.6.3. Timing Out Children:
+                // "Rx-off-when-idle SSED Children and Parents do not need to send specific keep-alive
+                // messages as long as the link is CSL synchronized."
+                checkTimeout = false;
+            }
+        }
+#endif
+
+        if (checkTimeout && TimerMilli::GetNow() - child.GetLastHeard() >= timeout)
         {
             LogInfo("Child 0x%04x timeout expired", child.GetRloc16());
             RemoveNeighbor(child);
@@ -1797,8 +1904,13 @@ void Mle::SendParentResponse(const ParentResponseInfo &aInfo)
 #endif
     child->GenerateChallenge();
     SuccessOrExit(error = message->AppendChallengeTlv(child->GetChallenge()));
-    SuccessOrExit(error = message->AppendLinkMarginTlv(child->GetLinkInfo().GetLinkMargin()));
-    SuccessOrExit(error = message->AppendConnectivityTlv());
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    if (!IsWedPresent())
+#endif
+    {
+        SuccessOrExit(error = message->AppendLinkMarginTlv(child->GetLinkInfo().GetLinkMargin()));
+        SuccessOrExit(error = message->AppendConnectivityTlv());
+    }
     SuccessOrExit(error = message->AppendVersionTlv());
 
     destination.SetToLinkLocalAddress(aInfo.mChildExtAddress);
@@ -2396,6 +2508,7 @@ void Mle::HandleChildUpdateRequestOnParent(RxInfo &aRxInfo)
         {
             // Clear CSL synchronization state
             child->SetCslSynchronized(false);
+            child->SetCslPrevSnValid(false);
         }
 #endif
 
@@ -2717,6 +2830,9 @@ void Mle::HandleDiscoveryRequest(RxInfo &aRxInfo)
     discoveryRequestTlv.SetLength(0);
 
     VerifyOrExit(IsRouterEligible(), error = kErrorInvalidState);
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    VerifyOrExit(IsRxOnWhenIdle(), error = kErrorInvalidState); // Ignore Discovery Request for Sleepy Router
+#endif
 
     SuccessOrExit(error = Tlv::FindTlvValueOffsetRange(aRxInfo.mMessage, Tlv::kDiscovery, offsetRange));
 
@@ -2930,6 +3046,12 @@ Error Mle::SendChildIdResponse(Child &aChild)
     if (aChild.IsTimeSyncEnabled())
     {
         message->SetTimeSync(true);
+    }
+#endif
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    if (IsWedPresent())
+    {
+        Get<Mac::Mac>().UpdateCsl();
     }
 #endif
 
@@ -3249,6 +3371,15 @@ void Mle::RemoveNeighbor(Neighbor &aNeighbor)
     aNeighbor.SetState(Neighbor::kStateInvalid);
 #if OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
     aNeighbor.RemoveAllForwardTrackingSeriesInfo();
+#endif
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    if (&aNeighbor == GetWed())
+    {
+        mWedAttachState = kWedDetached;
+        Get<Mac::Mac>().UpdateCsl();
+        SetWed(nullptr);
+        LogInfo("WED detached");
+    }
 #endif
 
 exit:

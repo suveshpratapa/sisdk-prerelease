@@ -170,13 +170,16 @@ public:
         mTxFrame802154.SetIsSecurityProcessed(false);
         mTxFrame802154.SetCsmaCaEnabled(true); // Set to true by default, only set to `false` for CSL transmission
         mTxFrame802154.SetIsHeaderUpdated(false);
-#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if (OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE) || OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
         mTxFrame802154.SetTxDelay(0);
         mTxFrame802154.SetTxDelayBaseTime(0);
 #endif
         mTxFrame802154.SetTxPower(kRadioPowerInvalid);
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
         mTxFrame802154.SetCslIePresent(false);
+#endif
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE || OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+        mTxFrame802154.SetExtraCcaAttempts(0);
 #endif
 #endif
 #if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
@@ -461,23 +464,48 @@ public:
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     /**
-     * Sets CSL parameters in all radios.
+     * Configures CSL parameters in all radios.
      *
-     * @param[in]  aPeriod    The CSL period.
-     * @param[in]  aChannel   The CSL channel.
-     * @param[in]  aShortAddr The short source address of CSL receiver's peer.
-     * @param[in]  aExtAddr   The extended source address of CSL receiver's peer.
+     * @param[in]  aPeriod     The CSL period.
+     * @param[in]  aChannel    The CSL channel.
+     * @param[in]  aShortAddr  The short source address of CSL receiver's peer.
+     * @param[in]  aExtAddr    The extended source address of CSL receiver's peer.
+     * @param[in]  aSampleTime The exact sample time to be used when different from 0.
+     *
+     * @retval  TRUE if CSL Period or CSL Channel changed.
+     * @retval  FALSE if CSL Period and CSL Channel did not change.
      */
-    void SetCslParams(uint16_t aPeriod, uint8_t aChannel, ShortAddress aShortAddr, const ExtAddress &aExtAddr)
+    bool UpdateCsl(uint16_t          aPeriod,
+                   uint8_t           aChannel,
+                   ShortAddress      aShortAddr,
+                   const ExtAddress &aExtAddr,
+                   uint32_t         &aSampleTime)
     {
+        bool retval = false;
+
         OT_UNUSED_VARIABLE(aPeriod);
         OT_UNUSED_VARIABLE(aChannel);
         OT_UNUSED_VARIABLE(aShortAddr);
         OT_UNUSED_VARIABLE(aExtAddr);
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
-        mSubMac.SetCslParams(aPeriod, aChannel, aShortAddr, aExtAddr);
+        retval = mSubMac.UpdateCsl(aPeriod, aChannel, aShortAddr, aExtAddr, aSampleTime);
+#endif
+        return retval;
+    }
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    /**
+     * Notifies all radios whether a link with a WED is active/inactive.
+     *
+     * @param[in]  aPresent   TRUE if WED is present. FALSE otherwise.
+     */
+    void WedPresent(bool aPresent)
+    {
+        OT_UNUSED_VARIABLE(aPresent);
+#if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
+        mSubMac.WedPresent(aPresent);
 #endif
     }
+#endif
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
 #if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE

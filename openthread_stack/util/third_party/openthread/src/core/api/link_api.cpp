@@ -418,6 +418,10 @@ uint16_t otLinkGetCcaFailureRate(otInstance *aInstance)
     return AsCoreType(aInstance).Get<Mac::Mac>().GetCcaFailureRate();
 }
 
+uint32_t otLinkCslPeriodToUs(uint16_t aPeriod) { return aPeriod * kUsPerTenSymbols; }
+
+uint32_t otLinkCslPeriodToMs(uint16_t aPeriod) { return aPeriod * kUsPerTenSymbols / 1000; }
+
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 bool otLinkIsCslEnabled(otInstance *aInstance) { return AsCoreType(aInstance).Get<Mac::Mac>().IsCslEnabled(); }
 

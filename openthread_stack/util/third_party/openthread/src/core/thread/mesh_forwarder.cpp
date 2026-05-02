@@ -83,6 +83,9 @@ MeshForwarder::MeshForwarder(Instance &aInstance)
     , mIndirectSender(aInstance)
 #endif
     , mDataPollSender(aInstance)
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    , mEnhCslSender(aInstance)
+#endif
 {
 #if OPENTHREAD_CONFIG_TX_QUEUE_STATISTICS_ENABLE
     mTxQueueStats.Clear();
@@ -93,7 +96,14 @@ void MeshForwarder::Start(void)
 {
     if (!mEnabled)
     {
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+        // For Wake-up end device, do not turn on the receiver by default if it is configured as rx-off when idle. This
+        // would keep WED sleeping on start-up when it is not in the network and sampling for wake-up frames.
+        Get<Mac::Mac>().SetRxOnWhenIdle(Get<Mle::Mle>().IsRxOnWhenIdle());
+#else
         Get<Mac::Mac>().SetRxOnWhenIdle(true);
+#endif
+
 #if OPENTHREAD_FTD
         mIndirectSender.Start();
 #endif
@@ -633,16 +643,41 @@ void MeshForwarder::SetRxOnWhenIdle(bool aRxOnWhenIdle)
 {
     Get<Mac::Mac>().SetRxOnWhenIdle(aRxOnWhenIdle);
 
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    // Data polls not allowed in enhanced CSL mode
+    if (!Get<Mle::Mle>().IsWakeupCoordinatorPresent())
+#endif
+    {
+        if (aRxOnWhenIdle)
+        {
+            mDataPollSender.StopPolling();
+        }
+        else
+        {
+            mDataPollSender.StartPolling();
+        }
+    }
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    else
+    {
+        // Stop the polling if it was ON before establishing
+        // the eCsl session, otherwise it will disrupt the session.
+        mDataPollSender.StopPolling();
+    }
+#endif
+
     if (aRxOnWhenIdle)
     {
-        mDataPollSender.StopPolling();
         Get<SupervisionListener>().Stop();
     }
     else
     {
-        mDataPollSender.StartPolling();
         Get<SupervisionListener>().Start();
     }
+
+    ExitNow();
+exit:
+    return;
 }
 
 Mac::TxFrame *MeshForwarder::HandleFrameRequest(Mac::TxFrames &aTxFrames)
@@ -680,7 +715,11 @@ Mac::TxFrame *MeshForwarder::HandleFrameRequest(Mac::TxFrames &aTxFrames)
             VerifyOrExit(frame != nullptr);
         }
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-        else if (Get<Mac::Mac>().IsCslEnabled() && mSendMessage->IsSubTypeMle())
+        else if (Get<Mac::Mac>().IsCslEnabled() && mSendMessage->IsSubTypeMle()
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+                 && !Get<Mac::Mac>().IsCstEnabled()
+#endif
+        )
         {
             mSendMessage->SetLinkSecurityEnabled(true);
         }
@@ -1017,7 +1056,16 @@ void MeshForwarder::HandleReceivedFrame(Mac::RxFrame &aFrame)
 
     rxInfo.mLinkInfo.SetFrom(aFrame);
 
-    Get<SupervisionListener>().UpdateOnReceive(rxInfo.mMacAddrs.mSource, rxInfo.IsLinkSecurityEnabled());
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    if (Get<Mle::Mle>().IsWakeupCoordinatorPresent() && (aFrame.GetHeaderIe(Mac::CstIe::kHeaderIeId) == nullptr))
+    {
+        // Don't update supervision if attached to WC but incoming frame doesn't contain CST IEs
+    }
+    else
+#endif
+    {
+        Get<SupervisionListener>().UpdateOnReceive(rxInfo.mMacAddrs.mSource, rxInfo.IsLinkSecurityEnabled());
+    }
 
     switch (aFrame.GetType())
     {

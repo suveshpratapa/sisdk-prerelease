@@ -2217,6 +2217,18 @@ enum
      */
     SPINEL_PROP_MAC_MAX_RETRY_NUMBER_INDIRECT = SPINEL_PROP_MAC_EXT__BEGIN + 11,
 
+    /// MAC Raw Stream Enable At
+    /** Format: `CLLC`:
+     *  'C': channel
+     *  'L': window start time in the units of microseconds
+     *  'L': window duration in the units of microseconds
+     *  'C': window slot ID
+     *
+     * Enable raw MAC frames to be emitted from `PROP_STREAM_RAW` for the given time window.
+     *
+     */
+    SPINEL_PROP_MAC_RAW_STREAM_ENABLE_AT = SPINEL_PROP_MAC_EXT__BEGIN + 12,
+
     SPINEL_PROP_MAC_EXT__END = 0x1400,
 
     SPINEL_PROP_NET__BEGIN = 0x40,
@@ -3480,6 +3492,8 @@ enum
      *        in `otRadioFrame` (default zero).
      *  `C` : RX channel after TX done (default assumed to be same as
      *        channel in metadata)
+     *  `C` : Maximum extra CCA attempts while the channel is busy.
+     *
      */
     SPINEL_PROP_STREAM_RAW = SPINEL_PROP_STREAM__BEGIN + 1,
 
@@ -4750,6 +4764,46 @@ enum
      */
     SPINEL_PROP_RCP_CSL_UNCERTAINTY = SPINEL_PROP_RCP_EXT__BEGIN + 5,
 
+    /// CSL Sample time
+    /**
+     * Format: 'L' (write-only)
+     * Required capability: `SPINEL_CAP_NET_THREAD_1_2`
+     *
+     * The 32 least significant bits of CSL sample time, in the units of us.
+     */
+    SPINEL_PROP_RCP_CSL_SAMPLE_TIME = SPINEL_PROP_RCP_EXT__BEGIN + 6,
+
+    /// CSL Enable
+    /**
+     * Format: 'LSE' (write-only)
+     * Required capability: `SPINEL_CAP_NET_THREAD_1_2`
+     *
+     * The CSL period (in the units of 10 symbols) and the CSL transmitter's short and long address,
+     * needed to enable emitting CSL IE with properly calculated CSL phase.
+     * The CSL period of 0 disables the CSL.
+     */
+    SPINEL_PROP_RCP_CSL_ENABLE = SPINEL_PROP_RCP_EXT__BEGIN + 7,
+
+    /// CST Sample time
+    /**
+     * Format: 'L' (write-only)
+     * Required capability: `SPINEL_CAP_NET_THREAD_1_2`
+     *
+     * The 32 least significant bits of CST sample time, in the units of us.
+     */
+    SPINEL_PROP_RCP_CST_SAMPLE_TIME = SPINEL_PROP_RCP_EXT__BEGIN + 8,
+
+    /// CST Enable
+    /**
+     * Format: 'LSE' (write-only)
+     * Required capability: `SPINEL_CAP_NET_THREAD_1_2`
+     *
+     * The CST period (in the units of 10 symbols) and the CSL receiver's short and long address,
+     * needed to enable emitting CST IE with properly calculated CSL phase.
+     * The CST period of 0 disables the CST.
+     */
+    SPINEL_PROP_RCP_CST_ENABLE = SPINEL_PROP_RCP_EXT__BEGIN + 9,
+
     SPINEL_PROP_RCP_EXT__END = 0x900,
 
     SPINEL_PROP_MULTIPAN__BEGIN = 0x900,
@@ -5039,40 +5093,6 @@ enum
     SPINEL_PROP_BORDER_ROUTER_DHCP6_PD_PREFIX = SPINEL_PROP_BORDER_ROUTER__BEGIN + 2,
 
     SPINEL_PROP_BORDER_ROUTER__END = 0x9A0,
-
-    SPINEL_PROP_TREL__BEGIN = 0x9A0,
-
-    /// TREL UDP Port (publish selected local UDP port used by NCP for TREL)
-    /** Format `S` (read-only)
-     *
-     *  Provides the 16-bit UDP port number bound locally for TREL packets.
-     *  Only present when OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE is true.
-     */
-    SPINEL_PROP_TREL_UDP_PORT = SPINEL_PROP_TREL__BEGIN + 1,
-
-    /// TREL Peer Info (discovery insert/remove events)
-    /** Format (struct): E6SCSd
-     *   E : Extended Address (peer EUI-64)
-     *   6 : Peer IPv6 address (if known, otherwise all zeros)
-     *   S : Peer UDP port
-     *   C : Flags (bit 0 = removed (VALUE_REMOVED), other bits reserved)
-     *   S : TXT-DATA length
-     *   d : TXT-DATA bytes
-     * Emitted as VALUE_INSERTED when a peer is discovered, VALUE_REMOVED when peer disappears.
-     * Only present when OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE && NCP build.
-     */
-    SPINEL_PROP_TREL_PEER_INFO = SPINEL_PROP_TREL__BEGIN + 2,
-
-    /// TREL service state.
-    /**
-     * Format: `bS`: Get and Unsolicited notifications.
-     *
-     * `b`: Whether the TREL service is running or not.
-     * `S`: The UDP port that is being used by the TREL service. If the TREL is not active, the port MUST be 0.
-     */
-    SPINEL_PROP_TREL_STATE = SPINEL_PROP_TREL__BEGIN + 3,
-
-    SPINEL_PROP_TREL__END = 0x9C0,
 
     SPINEL_PROP_NEST__BEGIN = 0x3BC0,
 

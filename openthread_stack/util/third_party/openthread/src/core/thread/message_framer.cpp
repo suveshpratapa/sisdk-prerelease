@@ -34,6 +34,7 @@
 #include "message_framer.hpp"
 
 #include "instance/instance.hpp"
+#include "thread/mle.hpp"
 
 namespace ot {
 
@@ -56,6 +57,13 @@ void MessageFramer::DetermineMacSourceAddress(const Ip6::Address &aIp6Addr, Mac:
 void MessageFramer::PrepareMacHeaders(Mac::TxFrame &aTxFrame, Mac::TxFrame::Info &aTxFrameInfo, const Message *aMessage)
 {
     const Neighbor *neighbor;
+    bool            cslNeighborPresent = false;
+
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    cslNeighborPresent = (Get<Mac::Mac>().IsCslEnabled() &&
+                          (Get<NeighborTable>().FindNeighbor(aTxFrameInfo.mAddrs.mDestination,
+                                                             Neighbor::kInStateAnyExceptInvalid) != nullptr));
+#endif
 
     aTxFrameInfo.mVersion = Mac::Frame::kVersion2006;
 
@@ -69,14 +77,17 @@ void MessageFramer::PrepareMacHeaders(Mac::TxFrame &aTxFrame, Mac::TxFrame::Info
 
     neighbor = Get<NeighborTable>().FindNeighbor(aTxFrameInfo.mAddrs.mDestination);
 
-    if (neighbor == nullptr)
+    if ((neighbor == nullptr) && !cslNeighborPresent)
     {
     }
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-    else if (Get<Mac::Mac>().IsCslEnabled())
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    else if (cslNeighborPresent)
     {
         aTxFrameInfo.mAppendCslIe = true;
-        aTxFrameInfo.mVersion     = Mac::Frame::kVersion2015;
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+        aTxFrameInfo.mAppendCstIe = Get<Mac::Mac>().IsCstEnabled();
+#endif
+        aTxFrameInfo.mVersion = Mac::Frame::kVersion2015;
     }
 #endif
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
@@ -114,6 +125,7 @@ void MessageFramer::PrepareMacHeaders(Mac::TxFrame &aTxFrame, Mac::TxFrame::Info
 
     OT_UNUSED_VARIABLE(aMessage);
     OT_UNUSED_VARIABLE(neighbor);
+    OT_UNUSED_VARIABLE(cslNeighborPresent);
 }
 
 void MessageFramer::PrepareEmptyFrame(Mac::TxFrame &aFrame, const Mac::Address &aMacDest, bool aAckRequest)
@@ -335,7 +347,12 @@ start:
 
     if (nextOffset < aMessage.GetLength())
     {
-        aFrame.SetFramePending(true);
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+        if (!Get<Mle::Mle>().IsWakeupCoordinatorPresent())
+#endif
+        {
+            aFrame.SetFramePending(true);
+        }
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
         aMessage.SetTimeSync(false);
 #endif

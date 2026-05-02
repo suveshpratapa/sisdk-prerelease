@@ -60,7 +60,7 @@ IndirectSender::IndirectSender(Instance &aInstance)
     , mSourceMatchController(aInstance)
     , mDataPollHandler(aInstance)
 #endif
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     , mCslTxScheduler(aInstance)
 #endif
 {
@@ -80,7 +80,7 @@ void IndirectSender::Stop(void)
     mDataPollHandler.Clear();
 #endif
 
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     mCslTxScheduler.Clear();
 #endif
 
@@ -93,8 +93,6 @@ exit:
 void IndirectSender::AddMessageForSleepyChild(Message &aMessage, Child &aChild)
 {
     uint16_t childIndex;
-
-    OT_ASSERT(!aChild.IsRxOnWhenIdle());
 
     childIndex = Get<ChildTable>().GetChildIndex(aChild);
     VerifyOrExit(!aMessage.GetIndirectTxChildMask().Has(childIndex));
@@ -512,6 +510,13 @@ void IndirectSender::HandleSentFrameToChild(const Mac::TxFrame &aFrame,
     }
 
     UpdateIndirectMessage(aChild);
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    if (Get<Mle::Mle>().IsWedPresent())
+    {
+        Get<Mle::Mle>().HandleSentFrameToNeighbor(static_cast<Neighbor &>(aChild));
+    }
+#endif
 
 exit:
     if (mEnabled)

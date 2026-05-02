@@ -75,7 +75,8 @@ Storage::KeyRefManager::KeyRefManager(Instance &aInstance)
     // initialization destroys instance 0's keys.
     mExtraOffset = kKeyRefExtraOffset * Instance::GetIdx(&aInstance);
 #else
-#error "OPENTHREAD_CONFIG_MULTIPLE_STATIC_INSTANCE_ENABLE must be enabled when both OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE and OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE are enabled"
+#error \
+    "OPENTHREAD_CONFIG_MULTIPLE_STATIC_INSTANCE_ENABLE must be enabled when both OPENTHREAD_CONFIG_MULTIPLE_INSTANCE_ENABLE and OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE are enabled"
 #endif
 #endif
 }

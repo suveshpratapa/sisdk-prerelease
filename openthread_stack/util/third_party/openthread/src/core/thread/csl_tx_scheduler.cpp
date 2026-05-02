@@ -28,7 +28,7 @@
 
 #include "csl_tx_scheduler.hpp"
 
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
 
 #include "instance/instance.hpp"
 
@@ -79,6 +79,7 @@ void CslTxScheduler::Clear(void)
     {
         child.ResetCslTxAttempts();
         child.SetCslSynchronized(false);
+        child.SetCslPrevSnValid(false);
         child.SetCslChannel(0);
         child.SetCslTimeout(0);
         child.SetCslPeriod(0);
@@ -159,6 +160,7 @@ Mac::TxFrame *CslTxScheduler::HandleFrameRequest(Mac::TxFrames &aTxFrames)
     Mac::TxFrame *frame = nullptr;
     uint32_t      txDelay;
     uint32_t      delay;
+    bool          isCsl = false;
 
     VerifyOrExit(mCslTxNeighbor != nullptr);
     VerifyOrExit(mCslTxNeighbor->IsCslSynchronized());
@@ -183,7 +185,13 @@ Mac::TxFrame *CslTxScheduler::HandleFrameRequest(Mac::TxFrames &aTxFrames)
         frame->SetIsARetransmission(true);
         frame->SetSequence(mCslTxNeighbor->GetIndirectDataSequenceNumber());
 
-        if (frame->GetSecurityEnabled())
+        // If the frame contains CSL IE, it must be refreshed and re-secured with a new frame counter.
+        // See Thread 1.3.0 Specification, 3.2.6.3.7 CSL Retransmissions
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+        isCsl = frame->IsCslIePresent();
+#endif
+
+        if (frame->GetSecurityEnabled() && !isCsl)
         {
             frame->SetFrameCounter(mCslTxNeighbor->GetIndirectFrameCounter());
             frame->SetKeyId(mCslTxNeighbor->GetIndirectKeyId());
@@ -254,6 +262,15 @@ exit:
 
 void CslTxScheduler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, CslNeighbor &aCslNeighbor)
 {
+    uint8_t cslAttempts = kMaxCslTriggeredTxAttempts;
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    if (Get<Mle::Mle>().IsWedPresent())
+    {
+        cslAttempts = kMaxEnhCslTriggeredTxAttempts;
+    }
+#endif
+
     switch (aError)
     {
     case kErrorNone:
@@ -266,13 +283,22 @@ void CslTxScheduler::HandleSentFrame(const Mac::TxFrame &aFrame, Error aError, C
 
         aCslNeighbor.IncrementCslTxAttempts();
         LogInfo("CSL tx to %04x failed, attempt %d/%d", aCslNeighbor.GetRloc16(), aCslNeighbor.GetCslTxAttempts(),
-                kMaxCslTriggeredTxAttempts);
+                cslAttempts);
 
-        if (aCslNeighbor.GetCslTxAttempts() >= kMaxCslTriggeredTxAttempts)
+        if (aCslNeighbor.GetCslTxAttempts() >= cslAttempts)
         {
             // CSL transmission attempts reach max, consider child out of sync
             aCslNeighbor.SetCslSynchronized(false);
             aCslNeighbor.ResetCslTxAttempts();
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+            if (Get<Mle::Mle>().IsWedPresent())
+            {
+                Get<MeshForwarder>().RemoveMessageIfNoPendingTx(*aCslNeighbor.GetIndirectMessage());
+                Get<Mle::Mle>().RemoveNeighbor(aCslNeighbor);
+                ExitNow();
+            }
+#endif
         }
 
         OT_FALL_THROUGH;

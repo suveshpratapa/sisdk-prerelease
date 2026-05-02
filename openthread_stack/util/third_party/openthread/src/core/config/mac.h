@@ -520,6 +520,16 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_MAC_ENH_CSL_TX_ATTEMPTS
+ *
+ * Maximum number of TX attempts for the enhanced CSL communication before considering the peer de-synchronized.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_ENH_CSL_TX_ATTEMPTS
+#define OPENTHREAD_CONFIG_MAC_ENH_CSL_TX_ATTEMPTS 8
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_MAC_SCAN_DURATION
  *
  * This setting configures the default scan duration in milliseconds.
@@ -556,6 +566,29 @@
  */
 #ifndef OPENTHREAD_CONFIG_MAC_DATA_POLL_TIMEOUT
 #define OPENTHREAD_CONFIG_MAC_DATA_POLL_TIMEOUT 100
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ENABLE
+ *
+ * Define to 1 to enable extra CCA attempts logic.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ENABLE
+#define OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ENABLE \
+    (OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE || OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE)
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ATTEMPTS
+ *
+ * Maximum number of CCA attempts to be performed after the first one if the channel is busy.
+ *
+ * Used for Enhanced-CSL links only.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ATTEMPTS
+#define OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ATTEMPTS 3
 #endif
 
 /**

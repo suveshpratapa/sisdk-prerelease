@@ -700,6 +700,17 @@ public:
     CslIe *GetCslIe(void) { return AsNonConst(AsConst(this)->GetCslIe()); }
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
 
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    /**
+     * Finds CST IE in the frame and modify its content.
+     *
+     * @param[in] aCstPeriod  CST Period in CST IE.
+     * @param[in] aCstPhase   CST Phase in CST IE.
+     *
+     */
+    void SetCstIe(uint16_t aCstPeriod, uint16_t aCstPhase);
+#endif
+
 #if OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
     /**
      * Finds Enhanced ACK Probing (Vendor Specific) IE and set its value.
@@ -1070,8 +1081,11 @@ public:
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
         bool mAppendTimeIe : 1; ///< Whether to append Time IE.
 #endif
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
         bool mAppendCslIe : 1; ///< Whether to append CSL IE.
+#endif
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+        bool mAppendCstIe : 1; ///< Whether to append CST IE.
 #endif
         bool mEmptyPayload : 1; ///< Whether payload is empty (to decide about appending Termination2 IE).
 #endif
@@ -1347,6 +1361,24 @@ public:
      */
     void SetTxDelayBaseTime(uint32_t aTxDelayBaseTime) { mInfo.mTxInfo.mTxDelayBaseTime = aTxDelayBaseTime; }
 #endif
+
+#if OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ENABLE
+    /**
+     * Returns the number of extra CCA attempts for this frame.
+     *
+     * @returns The number of extra CCA attempts.
+     *
+     */
+    uint8_t GetExtraCcaAttempts(void) const { return mInfo.mTxInfo.mExtraCcaAttempts; }
+
+    /**
+     * Sets the number of extra CCA attempts for this frame.
+     *
+     * @param[in]  aAttempts  The number of extra CCA attempts.
+     *
+     */
+    void SetExtraCcaAttempts(uint8_t aAttempts) { mInfo.mTxInfo.mExtraCcaAttempts = aAttempts; }
+#endif /* OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ENABLE */
 };
 
 OT_TOOL_PACKED_BEGIN

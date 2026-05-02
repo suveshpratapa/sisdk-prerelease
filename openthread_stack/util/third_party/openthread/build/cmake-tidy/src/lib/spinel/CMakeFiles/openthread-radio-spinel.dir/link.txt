@@ -1,0 +1,2 @@
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ar qc libopenthread-radio-spinel.a "CMakeFiles/openthread-radio-spinel.dir/logger.cpp.o" "CMakeFiles/openthread-radio-spinel.dir/radio_spinel.cpp.o" "CMakeFiles/openthread-radio-spinel.dir/spinel_driver.cpp.o" "CMakeFiles/openthread-radio-spinel.dir/spinel_helper.cpp.o"
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ranlib libopenthread-radio-spinel.a

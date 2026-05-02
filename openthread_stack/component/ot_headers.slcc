@@ -329,6 +329,7 @@ include:
   - path: thread/discover_scanner.hpp
   - path: thread/dua_manager.hpp
   - path: thread/energy_scan_server.hpp
+  - path: thread/enh_csl_sender.hpp
   - path: thread/indirect_sender.hpp
   - path: thread/indirect_sender_frame_context.hpp
   - path: thread/key_manager.hpp
@@ -369,6 +370,7 @@ include:
   - path: thread/time_sync_service.hpp
   - path: thread/tmf.hpp
   - path: thread/uri_paths.hpp
+  - path: thread/wakeup_coord_table.hpp
   - path: thread/version.hpp
   - path: utils/channel_manager.hpp
   - path: utils/channel_monitor.hpp

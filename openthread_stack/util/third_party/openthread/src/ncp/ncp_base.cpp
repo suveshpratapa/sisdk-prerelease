@@ -382,9 +382,6 @@ NcpBase::NcpBase(Instance *aInstance)
 #if OPENTHREAD_CONFIG_SRP_CLIENT_ENABLE
     otSrpClientSetCallback(mInstance, HandleSrpClientCallback, this);
 #endif
-#if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
-    otTrelSetStateChangeCallback(mInstance, HandleTrelStateChange, this);
-#endif
 #endif // OPENTHREAD_MTD || OPENTHREAD_FTD
 #if OPENTHREAD_CONFIG_DIAG_ENABLE
     otDiagSetOutputCallback(mInstance, &NcpBase::HandleDiagOutput_Jump, this);
@@ -1718,7 +1715,7 @@ template <> otError NcpBase::HandlePropertySet<SPINEL_PROP_MAC_RX_AT>(void)
         VerifyOrExit(when > now && (when - now) < UINT32_MAX, error = OT_ERROR_INVALID_ARGS);
 
         start = when - now;
-        error = otPlatRadioReceiveAt(mInstance, channel, start, duration);
+        error = otPlatRadioReceiveAt(mInstance, channel, start, duration, 0);
     }
 
 exit:

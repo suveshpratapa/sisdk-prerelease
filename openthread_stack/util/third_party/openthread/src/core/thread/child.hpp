@@ -320,21 +320,38 @@ public:
     void SetSupervisionInterval(uint16_t aInterval) { mSupervisionInterval = aInterval; }
 
     /**
-     * Increments the number of seconds since last supervision of the child.
+     * Increments the number of supervision time units since last supervision of the child.
      */
-    void IncrementSecondsSinceLastSupervision(void) { mSecondsSinceSupervision++; }
+    void IncrementUnitsSinceLastSupervision(void) { mUnitsSinceSupervision++; }
 
     /**
-     * Returns the number of seconds since last supervision of the child (last message to the child)
+     * Returns the number of supervision time units since last supervision of the child (last message to the child)
      *
      * @returns Number of seconds since last supervision of the child.
      */
-    uint16_t GetSecondsSinceLastSupervision(void) const { return mSecondsSinceSupervision; }
+    uint16_t GetUnitsSinceLastSupervision(void) const { return mUnitsSinceSupervision; }
 
     /**
-     * Resets the number of seconds since last supervision of the child to zero.
+     * Resets the number of supervision time units since last supervision of the child to zero.
      */
-    void ResetSecondsSinceLastSupervision(void) { mSecondsSinceSupervision = 0; }
+    void ResetUnitsSinceLastSupervision(void) { mUnitsSinceSupervision = 0; }
+
+    /**
+     * This method returns whether the child needs indirect transmission that uses synchronous TX
+     * slots or happens in response to the data request frames.
+     *
+     * @retval true   If the child needs indirect transmission.
+     * @retval false  If the child does not need indirect transmission.
+     */
+    bool NeedsIndirectTransmission(void) const
+    {
+        bool rval = !IsRxOnWhenIdle();
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+        /* WC uses synchronized transmissions even to MED children */
+        rval = rval || IsCslSynchronized();
+#endif
+        return rval;
+    }
 
 #if OPENTHREAD_CONFIG_TMF_PROXY_MLR_ENABLE
     /**
@@ -384,8 +401,10 @@ private:
         Mle::TxChallenge mAttachChallenge;
     };
 
-    uint16_t mSupervisionInterval;
-    uint16_t mSecondsSinceSupervision;
+    uint16_t mSupervisionInterval;   // Supervision interval for the child (in sec).
+    uint16_t mUnitsSinceSupervision; // Number of supervision time units since last supervision of the child.
+
+    static_assert(OPENTHREAD_CONFIG_NUM_MESSAGE_BUFFERS < 8192, "mQueuedMessageCount cannot fit max required!");
 };
 
 DefineCoreType(otChildInfo, Child::Info);

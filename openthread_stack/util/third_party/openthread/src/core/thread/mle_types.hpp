@@ -79,14 +79,18 @@ namespace Mle {
 
 constexpr uint16_t kUdpPort = 19788; ///< MLE UDP Port
 
-constexpr uint16_t kMaxChildren     = OPENTHREAD_CONFIG_MLE_MAX_CHILDREN; ///< Maximum number of children
-constexpr uint16_t kMinChildId      = 1;                                  ///< Minimum Child ID
-constexpr uint16_t kMaxChildId      = 511;                                ///< Maximum Child ID
-constexpr uint8_t  kMaxRouters      = OPENTHREAD_CONFIG_MLE_MAX_ROUTERS;  ///< Maximum number of routers
-constexpr uint8_t  kMaxRouterId     = OT_NETWORK_MAX_ROUTER_ID;           ///< Max Router ID
-constexpr uint8_t  kInvalidRouterId = kMaxRouterId + 1;                   ///< Value indicating invalid Router ID
-constexpr uint8_t  kRouterIdOffset  = 10;                                 ///< Bit offset of router ID in RLOC16
-constexpr uint16_t kInvalidRloc16   = Mac::kShortAddrInvalid;             ///< Invalid RLOC16.
+constexpr uint16_t kMaxChildren                 = OPENTHREAD_CONFIG_MLE_MAX_CHILDREN; ///< Maximum number of children
+constexpr uint32_t kWakeupParentResponseTimeout = 500;  ///< Wait time to rx Parent Response for Wakeup Radio (in msec)
+constexpr uint32_t kWakeupChildIdRequestTimeout = 1000; ///< Wait time to rx Child ID Request for Wakeup Radio (in msec)
+constexpr uint32_t kWakeupChildIdResponseTimeout =
+    1000;                                  ///< Wait time to rx Child ID Response for Wakeup Radio (in msec)
+constexpr uint16_t kMinChildId      = 1;   ///< Minimum Child ID
+constexpr uint16_t kMaxChildId      = 511; ///< Maximum Child ID
+constexpr uint8_t  kMaxRouters      = OPENTHREAD_CONFIG_MLE_MAX_ROUTERS; ///< Maximum number of routers
+constexpr uint8_t  kMaxRouterId     = OT_NETWORK_MAX_ROUTER_ID;          ///< Max Router ID
+constexpr uint8_t  kInvalidRouterId = kMaxRouterId + 1;                  ///< Value indicating invalid Router ID
+constexpr uint8_t  kRouterIdOffset  = 10;                                ///< Bit offset of router ID in RLOC16
+constexpr uint16_t kInvalidRloc16   = Mac::kShortAddrInvalid;            ///< Invalid RLOC16.
 
 #if OPENTHREAD_CONFIG_MLE_LONG_ROUTES_ENABLE
 constexpr uint8_t kMaxRouteCost = 127; ///< Maximum path cost
@@ -471,13 +475,21 @@ public:
     /**
      * Indicates whether or not the device mode flags are valid.
      *
-     * An FTD which is not rx-on-when-idle (is sleepy) is considered invalid.
+     * An FTD which is not rx-on-when-idle (is sleepy) is considered invalid
+     * unless WC configuration is enabled.
      *
      * @returns TRUE if , FALSE otherwise.
      * @retval TRUE   If the device mode flags are valid.
      * @retval FALSE  If the device mode flags are not valid.
      */
-    bool IsValid(void) const { return !IsFullThreadDevice() || IsRxOnWhenIdle(); }
+    bool IsValid(void) const
+    {
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+        return true;
+#else
+        return !IsFullThreadDevice() || IsRxOnWhenIdle();
+#endif
+    }
 
     /**
      * Converts the device mode into a human-readable string.

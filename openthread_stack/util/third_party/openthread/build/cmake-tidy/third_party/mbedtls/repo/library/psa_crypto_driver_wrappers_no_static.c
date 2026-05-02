@@ -1,0 +1,1 @@
+/Users/supratap/silabs-stash/silabs-thread/util/third_party/openthread/third_party/mbedtls/repo/library/psa_crypto_driver_wrappers_no_static.c

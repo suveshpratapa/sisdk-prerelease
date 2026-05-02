@@ -316,6 +316,15 @@ typedef struct otMacCounters
      * The total number of frames dropped due to other error.
      */
     uint32_t mRxErrOther;
+
+    /**
+     * The minimum, average and maximum error of the frame reception time in CSL mode (in microseconds).
+     *
+     */
+    int32_t mRxMinCslError;
+    int32_t mRxMaxCslError;
+    int32_t mRxCsl;
+    int64_t mRxSumCslError;
 } otMacCounters;
 
 /**
@@ -945,6 +954,28 @@ bool otLinkIsPromiscuous(otInstance *aInstance);
  *                                 the Thread interface is enabled.
  */
 otError otLinkSetPromiscuous(otInstance *aInstance, bool aPromiscuous);
+
+/**
+ * This helper function converts a CSL period-like value in units of 10 symbols
+ * to a value in units of microseconds.
+ *
+ * @param[in]  aPeriod        The CSL period in units of 10 symbols.
+ *
+ * @returns The CSL period in us.
+ *
+ */
+uint32_t otLinkCslPeriodToUs(uint16_t aPeriod);
+
+/**
+ * This helper function converts a CSL period-like value in units of 10 symbols
+ * to a value in units of milliseconds.
+ *
+ * @param[in]  aPeriod        The CSL period in units of 10 symbols.
+ *
+ * @returns The CSL period in ms.
+ *
+ */
+uint32_t otLinkCslPeriodToMs(uint16_t aPeriod);
 
 /**
  * Gets the CSL channel.

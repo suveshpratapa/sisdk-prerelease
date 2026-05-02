@@ -523,7 +523,44 @@ otError otThreadWakeup(otInstance         *aInstance,
     return AsCoreType(aInstance).Get<Mle::Mle>().Wakeup(AsCoreType(aWedAddress), aWakeupIntervalUs, aWakeupDurationMs,
                                                         aCallback, aCallbackContext);
 }
+#endif // OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE || OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+bool otThreadIsEnhCslPeerLinking(otInstance *aInstance)
+{
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    return AsCoreType(aInstance).Get<Mle::Mle>().IsWedAttaching();
 #endif
+
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    return AsCoreType(aInstance).Get<Mle::Mle>().IsWakeupCoordinatorPresent() &&
+           otThreadGetDeviceRole(aInstance) <= OT_DEVICE_ROLE_DETACHED;
+#endif
+}
+
+bool otThreadIsEnhCslPeerLinked(otInstance *aInstance)
+{
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    return AsCoreType(aInstance).Get<Mle::Mle>().IsWedAttached();
+#endif
+
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    return AsCoreType(aInstance).Get<Mle::Mle>().IsWakeupCoordinatorPresent() &&
+           otThreadGetDeviceRole(aInstance) > OT_DEVICE_ROLE_DETACHED;
+#endif
+}
+
+otError otThreadDetachEnhCslPeer(otInstance *aInstance)
+{
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    return AsCoreType(aInstance).Get<Mle::Mle>().DetachWed();
+#endif
+
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    return AsCoreType(aInstance).Get<Mle::Mle>().DetachFromWc();
+#endif
+}
+#endif // OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE || OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
 
 #endif // OPENTHREAD_FTD || OPENTHREAD_MTD
 

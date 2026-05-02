@@ -91,6 +91,18 @@ bool otMacFrameIsData(const otRadioFrame *aFrame)
     return static_cast<const Mac::Frame *>(aFrame)->GetType() == Mac::Frame::kTypeData;
 }
 
+bool otMacFrameIsMultipurpose(const otRadioFrame *aFrame)
+{
+    return static_cast<const Mac::Frame *>(aFrame)->GetType() == Mac::Frame::kTypeMultipurpose;
+}
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE || OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+bool otMacFrameIsWakeupFrame(const otRadioFrame *aFrame)
+{
+    return static_cast<const Mac::Frame *>(aFrame)->IsWakeupFrame();
+}
+#endif
+
 bool otMacFrameIsCommand(const otRadioFrame *aFrame)
 {
     return static_cast<const Mac::Frame *>(aFrame)->GetType() == Mac::Frame::kTypeMacCmd;
@@ -209,6 +221,13 @@ void otMacFrameSetCslIe(otRadioFrame *aFrame, uint16_t aCslPeriod, uint16_t aCsl
 }
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+void otMacFrameSetCstIe(otRadioFrame *aFrame, uint16_t aCstPeriod, uint16_t aCstPhase)
+{
+    static_cast<Mac::Frame *>(aFrame)->SetCstIe(aCstPeriod, aCstPhase);
+}
+#endif
+
 bool otMacFrameIsSecurityEnabled(otRadioFrame *aFrame)
 {
     return static_cast<const Mac::Frame *>(aFrame)->GetSecurityEnabled();
@@ -268,6 +287,23 @@ uint8_t otMacFrameGenerateCslIeTemplate(uint8_t *aDest)
     reinterpret_cast<Mac::HeaderIe *>(aDest)->SetLength(sizeof(Mac::CslIe));
 
     return sizeof(Mac::HeaderIe) + sizeof(Mac::CslIe);
+}
+#endif
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+uint8_t otMacFrameGenerateCstIeTemplate(uint8_t *aDest)
+{
+    assert(aDest != nullptr);
+
+    reinterpret_cast<Mac::HeaderIe *>(aDest)->SetId(Mac::CstIe::kHeaderIeId);
+    reinterpret_cast<Mac::HeaderIe *>(aDest)->SetLength(Mac::CstIe::kIeContentSize);
+
+    aDest += sizeof(Mac::HeaderIe);
+
+    reinterpret_cast<Mac::VendorIeHeader *>(aDest)->SetVendorOui(Mac::ThreadIe::kVendorOuiThreadCompanyId);
+    reinterpret_cast<Mac::VendorIeHeader *>(aDest)->SetSubType(Mac::CstIe::kThreadIeSubtype);
+
+    return sizeof(Mac::HeaderIe) + sizeof(Mac::CstIe);
 }
 #endif
 

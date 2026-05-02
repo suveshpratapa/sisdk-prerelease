@@ -214,6 +214,7 @@ source:
 - path: thread/discover_scanner.cpp
 - path: thread/dua_manager.cpp
 - path: thread/energy_scan_server.cpp
+- path: thread/enh_csl_sender.cpp
 - path: thread/indirect_sender.cpp
 - path: thread/key_manager.cpp
 - path: thread/link_metrics.cpp
@@ -256,6 +257,7 @@ source:
 - path: thread/tmf.cpp
 - path: thread/uri_paths.cpp
 - path: thread/version.cpp
+- path: thread/wakeup_coord_table.cpp
 - path: utils/channel_manager.cpp
 - path: utils/channel_monitor.cpp
 - path: utils/flash.cpp

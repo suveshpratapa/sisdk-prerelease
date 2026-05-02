@@ -39,6 +39,9 @@
 
 #include "common/code_utils.hpp"
 #include "instance/instance.hpp"
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+#include "thread/mle.hpp"
+#endif
 #include "utils/static_counter.hpp"
 
 namespace ot {
@@ -241,7 +244,18 @@ Error SubMac::Sleep(void)
     Error error = kErrorNone;
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
-    if (IsRadioSampleEnabled())
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+    if (IsCslEnabled()
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+        && !Get<Mle::Mle>().IsWakeupCoordinatorPresent()
+#endif
+    )
+    {
+        CslSample();
+    }
+    else
+#endif
+        if (IsRadioSampleEnabled())
     {
         RadioSample();
     }
@@ -654,6 +668,16 @@ void SubMac::SignalFrameCounterUsedOnTxDone(const TxFrame &aFrame)
 
     OT_UNUSED_VARIABLE(allowError);
 
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    if (aFrame.GetType() == Frame::kTypeMultipurpose && aFrame.GetFrameCounter(frameCounter) == kErrorNone)
+    {
+        // As long as Multipurpose frames are encrypted at the sub-mac layer, we have to
+        // update the frame counter used by the radio driver after Multipurpose frame TX.
+        // TODO: Support Multipurpose Frame encryption in radio
+        Get<Radio>().SetMacFrameCounter(frameCounter + 1);
+    }
+#endif
+
     VerifyOrExit(!ShouldHandleTransmitSecurity() && aFrame.GetSecurityEnabled() && aFrame.IsHeaderUpdated());
 
     // In an FTD/MTD build, if/when link-raw is enabled, the `TxFrame`
@@ -1038,7 +1062,14 @@ void SubMac::RadioSample(void)
 
     SetState(kStateRadioSample);
 
-    if (!RadioSupportsReceiveTiming())
+    if (RadioSupportsReceiveTiming())
+    {
+#if !OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE
+        // Keep the radio in sleep state between scheduled receive windows.
+        IgnoreError(Get<Radio>().Sleep());
+#endif
+    }
+    else
     {
         UpdateRadioSampleState();
     }

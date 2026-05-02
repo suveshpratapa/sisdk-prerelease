@@ -96,6 +96,28 @@ bool otMacFrameIsData(const otRadioFrame *aFrame);
 bool otMacFrameIsCommand(const otRadioFrame *aFrame);
 
 /**
+ * Check if @p aFrame is a Multipurpose frame.
+ *
+ * @param[in]   aFrame          A pointer to the frame.
+ *
+ * @retval  true    It is a Multipurpose frame.
+ * @retval  false   It is not a Multipurpose frame.
+ *
+ */
+bool otMacFrameIsMultipurpose(const otRadioFrame *aFrame);
+
+/**
+ * Check if @p aFrame is a Wakeup frame.
+ *
+ * @param[in]   aFrame          A pointer to the frame.
+ *
+ * @retval  true    It is a Wake-up frame.
+ * @retval  false   It is not a Wake-up frame.
+ *
+ */
+bool otMacFrameIsWakeupFrame(const otRadioFrame *aFrame);
+
+/**
  * Check if @p aFrame is a Data Request Command.
  *
  * @param[in]   aFrame          A pointer to the frame. For 802.15.4-2015 and above frame,
@@ -240,6 +262,16 @@ otError otMacFrameGenerateEnhAck(const otRadioFrame *aFrame,
 void otMacFrameSetCslIe(otRadioFrame *aFrame, uint16_t aCslPeriod, uint16_t aCslPhase);
 
 /**
+ * Set CST IE content into the frame.
+ *
+ * @param[in,out]   aFrame         A pointer to the frame to be modified.
+ * @param[in]       aCstPeriod     CST Period in CST IE.
+ * @param[in]       aCstPhase      CST Phase in CST IE.
+ *
+ */
+void otMacFrameSetCstIe(otRadioFrame *aFrame, uint16_t aCstPeriod, uint16_t aCstPhase);
+
+/**
  * Tell if the security of @p aFrame is enabled.
  *
  * @param[in]   aFrame          A pointer to the frame.
@@ -311,6 +343,16 @@ void otMacFrameSetFrameCounter(otRadioFrame *aFrame, uint32_t aFrameCounter);
  * @returns  The total count of bytes (total length of CSL IE) written to the buffer.
  */
 uint8_t otMacFrameGenerateCslIeTemplate(uint8_t *aDest);
+
+/**
+ * Write CST IE to a buffer (without setting IE value).
+ *
+ * @param[out]  aDest    A pointer to the output buffer.
+ *
+ * @returns  The total count of bytes (total length of CST IE) written to the buffer.
+ *
+ */
+uint8_t otMacFrameGenerateCstIeTemplate(uint8_t *aDest);
 
 /**
  * Write Enh-ACK Probing IE (Vendor IE with THREAD OUI) to a buffer.

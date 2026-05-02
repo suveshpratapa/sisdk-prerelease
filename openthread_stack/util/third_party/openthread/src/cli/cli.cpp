@@ -2586,6 +2586,12 @@ template <> otError Interpreter::Process<Cmd("counters")>(Arg aArgs[])
             {
                 OutputLine(kIndentSize, "%s: %lu", counter.mName, ToUlong(macCounters->*counter.mValuePtr));
             }
+
+            OutputLine(kIndentSize, "RxMinCslError: %ld", static_cast<long>(macCounters->mRxMinCslError));
+            OutputLine(kIndentSize, "RxAvgCslError: %ld",
+                       macCounters->mRxCsl != 0 ? static_cast<long>(macCounters->mRxSumCslError / macCounters->mRxCsl)
+                                                : 0L);
+            OutputLine(kIndentSize, "RxMaxCslError: %ld", static_cast<long>(macCounters->mRxMaxCslError));
         }
         /**
          * @cli counters mac reset
@@ -8517,11 +8523,71 @@ template <> otError Interpreter::Process<Cmd("wakeup")>(Arg aArgs[])
         SuccessOrExit(error = aArgs[2].ParseAsUint16(wakeupIntervalUs));
         SuccessOrExit(error = aArgs[3].ParseAsUint16(wakeupDurationMs));
 
-        SuccessOrExit(error = otThreadWakeup(GetInstancePtr(), &extAddress, wakeupIntervalUs, wakeupDurationMs,
-                                             HandleWakeupResult, this));
-        error = OT_ERROR_PENDING;
+        error =
+            otThreadWakeup(GetInstancePtr(), &extAddress, wakeupIntervalUs, wakeupDurationMs, HandleWakeupResult, this);
+        // ToDo: Disable it until mWakeupCallback gets integrated or needed.
+        // error = OT_ERROR_PENDING;
     }
 #endif // OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    /**
+     * @cli wakeup detach
+     * @code
+     * wakeup detach
+     * Done
+     * @endcode
+     * @par
+     * Detaches a currently linked enhanced CSL peer device, if any.
+     */
+    else if (aArgs[0] == "detach")
+    {
+        error = otThreadDetachEnhCslPeer(GetInstancePtr());
+    }
+    /**
+     * @cli wakeup state
+     * @code
+     * wakeup state
+     * disabled
+     * Done
+     * @endcode
+     * @code
+     * wakeup state
+     * enabled
+     * Done
+     * @endcode
+     * @code
+     * wakeup state
+     * linking
+     * Done
+     * @endcode
+     * @code
+     * wakeup state
+     * linked
+     * Done
+     * @endcode
+     * @par
+     * Prints the Wake-up link state.
+     */
+    else if (aArgs[0] == "state")
+    {
+        if (otThreadIsEnhCslPeerLinked(GetInstancePtr()))
+        {
+            OutputLine("linked");
+        }
+        else if (otThreadIsEnhCslPeerLinking(GetInstancePtr()))
+        {
+            OutputLine("linking");
+        }
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+        else if (otLinkIsWakeupListenEnabled(GetInstancePtr()))
+        {
+            OutputLine("enabled");
+        }
+#endif
+        else
+        {
+            OutputLine("disabled");
+        }
+    }
     else
     {
         ExitNow(error = OT_ERROR_INVALID_ARGS);

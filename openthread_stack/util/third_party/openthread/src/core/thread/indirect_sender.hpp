@@ -73,7 +73,7 @@ class IndirectSender : public InstanceLocator, public IndirectSenderBase, privat
 #if OPENTHREAD_FTD
     friend class DataPollHandler;
 #endif
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     friend class CslTxScheduler;
 #endif
 
@@ -286,7 +286,7 @@ private:
     SourceMatchController mSourceMatchController;
     DataPollHandler       mDataPollHandler;
 #endif
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     CslTxScheduler mCslTxScheduler;
 #endif
 };

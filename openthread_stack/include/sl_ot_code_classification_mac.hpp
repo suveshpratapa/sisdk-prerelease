@@ -39,7 +39,6 @@
 
 #include "common/clearable.hpp"
 #include "common/locator.hpp"
-#include "common/log.hpp"
 #include "common/non_copyable.hpp"
 #include "common/tasklet.hpp"
 #include "common/time.hpp"
@@ -53,9 +52,9 @@
 #include "radio/trel_link.hpp"
 #include "thread/key_manager.hpp"
 #include "thread/link_quality.hpp"
+#include "thread/wakeup_coord_table.hpp"
 
-#include "sl_code_classification.h"
-
+ #include "sl_code_classification.h"
 namespace ot {
 
 class Neighbor;
@@ -95,8 +94,10 @@ constexpr uint16_t kCslRequestAhead = OPENTHREAD_CONFIG_MAC_CSL_REQUEST_AHEAD_US
 
 constexpr uint16_t kMinCslIePeriod = OPENTHREAD_CONFIG_MAC_CSL_MIN_PERIOD;
 
+constexpr uint16_t kDefaultWakeupInterval = OPENTHREAD_CONFIG_MAC_CSL_WAKEUP_INTERVAL;
 constexpr uint32_t kDefaultWedListenInterval = OPENTHREAD_CONFIG_WED_LISTEN_INTERVAL;
 constexpr uint32_t kDefaultWedListenDuration = OPENTHREAD_CONFIG_WED_LISTEN_DURATION;
+constexpr uint8_t  kCslExtraCcaAttempts   = OPENTHREAD_CONFIG_MAC_EXTRA_CCA_ATTEMPTS;
 
 /**
  * Defines the function pointer called on receiving an IEEE 802.15.4 Beacon during an Active Scan.
@@ -221,7 +222,7 @@ public:
     void RequestIndirectFrameTransmission(void);
 #endif
 
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     /**
      * Requests `Mac` to start a CSL tx operation after a delay of @p aDelay time.
      *
@@ -237,6 +238,17 @@ public:
      */
     SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
     void RequestWakeupFrameTransmission(void);
+#endif
+
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    /**
+     * This method requests `Mac` to start an enhanced CSL tx operation after a delay of @p aDelay time.
+     *
+     * @param[in]  aDelay  Delay time for `Mac` to start an enhanced CSL tx, in units of milliseconds.
+     *
+     */
+    SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
+    void RequestEnhCslFrameTransmission(uint32_t aDelay);
 #endif
 
     /**
@@ -636,10 +648,17 @@ public:
     void SetCslChannel(uint8_t aChannel);
 
     /**
-     * Sets whether the MLE layer is capable of starting CSL.
+     * Centralizes CSL state switching conditions evaluating, configuring SubMac accordingly.
+     * @param[in]  aPeer        The CSL peer. If not specified, it is assumed to be the parent.
      *
-     * @retval TRUE   If MLE layer is capable of starting CSL.
-     * @retval FALSE  If MLE layer is not capable of starting CSL.
+     */
+    SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
+    void UpdateCsl(Neighbor *aPeer = nullptr);
+
+    /**
+     * Sets whether MAC is currently capable of running CSL.
+     *
+     * @param[in]  aIsCslCapable  TRUE if CSL is currently possible, FALSE otherwise.
      */
     SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
     void SetCslCapable(bool aIsCslCapable);
@@ -671,6 +690,27 @@ public:
     SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
     void SetCslPeriod(uint16_t aPeriod);
 
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    /**
+     * This method replaces the CSL period and backs up the old one.
+     * It also backs up the CSL channel and configures it as 0 to track the
+     * current MAC channel.
+     *
+     * @param[in]  aPeriod      The CSL period in 10 symbols.
+     * @param[in]  aSampleTime  The CSL sample time to be used by SubMac.
+     * @param[in]  aPeer        The CSL peer.
+     *
+     */
+    SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
+    void ReplaceCslPeriod(uint16_t aPeriod, uint32_t aSampleTime, Neighbor *aPeer);
+
+    /**
+     * This method restores the backed up CSL period and channel.
+     */
+    SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
+    void RestoreCslPeriod(void);
+#endif
+
     /**
      * This method converts a given CSL period in units of 10 symbols to microseconds.
      *
@@ -691,6 +731,15 @@ public:
     bool IsCslEnabled(void) const { return mIsCslEnabled; }
 
     /**
+     * Indicates whether Link is capable of starting CSL.
+     *
+     * @retval TRUE   If Link is capable of starting CSL.
+     * @retval FALSE  If link is not capable of starting CSL.
+     */
+    SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
+    bool IsCslCapable(void) const { return mIsCslCapable; }
+
+    /**
      * Returns parent CSL accuracy (clock accuracy and uncertainty).
      *
      * @returns The parent CSL accuracy.
@@ -704,11 +753,22 @@ public:
      * @param[in] aCslAccuracy  The parent CSL accuracy.
      */
     SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
-    void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy)
-    {
-        mLinks.GetSubMac().SetCslParentAccuracy(aCslAccuracy);
-    }
+    void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy);
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    /**
+     * This method indicates whether CST is started at the moment.
+     *
+     * TODO: Rethink API for enabling CST. For now, CST is enabled whenever CSL is enabled and the device is a router.
+     *
+     * @retval TRUE   If CST is enabled.
+     * @retval FALSE  If CST is not enabled.
+     *
+     */
+    SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
+    bool IsCstEnabled(void) const;
+#endif
 
 #if OPENTHREAD_CONFIG_MAC_FILTER_ENABLE && OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
     /**
@@ -829,6 +889,12 @@ public:
      */
     SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
     bool IsWakeupListenEnabled(void) const { return mWakeupListenEnabled; }
+
+    /**
+     * Applies previously saved CSL and CST IEs.
+     */
+    SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
+    void ApplyEnhCsl(void);
 #endif // OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
 
     /**
@@ -857,11 +923,14 @@ private:
 #if OPENTHREAD_FTD
         kOperationTransmitDataIndirect,
 #endif
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
         kOperationTransmitDataCsl,
 #endif
 #if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
         kOperationTransmitWakeup,
+#endif
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+        kOperationTransmitDataEnhCsl,
 #endif
     };
 
@@ -955,9 +1024,9 @@ private:
     uint8_t GetTimeIeOffset(const Frame &aFrame);
 #endif
 
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
-    void ProcessCsl(const RxFrame &aFrame, const Address &aSrcAddr);
+    Error ProcessCsl(const RxFrame &aFrame, const Address &aSrcAddr);
 #endif
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
@@ -972,6 +1041,8 @@ private:
 #if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
     SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
     Error HandleWakeupFrame(const RxFrame &aFrame);
+    SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
+    Error ProcessEnhCsl(const RxFrame &aFrame);
     SL_CODE_CLASSIFY(SL_CODE_COMPONENT_OPENTHREAD, SL_CODE_CLASS_TIME_CRITICAL)
     void  UpdateWakeupListening(void);
 #endif
@@ -995,6 +1066,7 @@ private:
 #endif
 #if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
     bool mWakeupListenEnabled : 1;
+    bool mIsCslPeriodReplaced : 1;
 #endif
     Operation   mOperation;
     uint16_t    mPendingOperations;
@@ -1012,7 +1084,7 @@ private:
 #if OPENTHREAD_FTD
     uint8_t mMaxFrameRetriesIndirect;
 #endif
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     TimeMilli mCslTxFireTime;
 #endif
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
@@ -1026,6 +1098,21 @@ private:
 #if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
     uint32_t mWakeupListenInterval;
     uint32_t mWakeupListenDuration;
+
+    WakeupCoordTable mWakeupCoordTable;
+
+    uint64_t  mCslPeerTimestamp;
+    uint64_t  mPrevCslPeerTimestamp;
+    uint32_t  mCslSampleTime;
+    uint16_t  mCslPeriodBak;
+    uint8_t   mCslChannelBak;
+    TimeMilli mEnhCslTxFireTime;
+    uint16_t  mCstIePeriod;
+    uint16_t  mCstIePhase;
+    uint16_t  mCslIePeriod;
+    uint16_t  mCslIePhase;
+    bool      mCstIeSet : 1;
+    bool      mCslIeSet : 1;
 #endif
     union
     {

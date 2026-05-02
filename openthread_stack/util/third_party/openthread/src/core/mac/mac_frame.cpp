@@ -178,7 +178,7 @@ void TxFrame::Info::PrepareHeadersIn(TxFrame &aTxFrame) const
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
     fcf |= (mAppendTimeIe ? kFcfIePresent : 0);
 #endif
-#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE || OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
     fcf |= (mAppendCslIe ? kFcfIePresent : 0);
 #endif
 #endif
@@ -233,6 +233,14 @@ void TxFrame::Info::PrepareHeadersIn(TxFrame &aTxFrame) const
         builder.Append<HeaderIe>()->Init(CslIe::kHeaderIeId, sizeof(CslIe));
         builder.Append<CslIe>();
         aTxFrame.SetCslIePresent(true);
+    }
+#endif
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    if (mAppendCstIe)
+    {
+        builder.Append<HeaderIe>()->Init(CstIe::kHeaderIeId, sizeof(CstIe));
+        builder.Append<CstIe>()->Init();
     }
 #endif
 
@@ -1245,6 +1253,23 @@ const CslIe *Frame::GetCslIe(void) const
 
 exit:
     return csl;
+}
+#endif
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+void Frame::SetCstIe(uint16_t aCstPeriod, uint16_t aCstPhase)
+{
+    uint8_t *cur = GetThreadIe(CstIe::kThreadIeSubtype);
+    CstIe   *cst;
+
+    VerifyOrExit(cur != nullptr);
+
+    cst = reinterpret_cast<CstIe *>(cur + sizeof(HeaderIe));
+    VerifyOrExit(cst != nullptr);
+    cst->SetPhase(aCstPhase);
+    cst->SetPeriod(aCstPeriod);
+exit:
+    return;
 }
 #endif
 

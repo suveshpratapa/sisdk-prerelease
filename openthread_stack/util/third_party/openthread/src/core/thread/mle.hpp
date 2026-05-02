@@ -75,7 +75,6 @@
 #include "thread/router_table.hpp"
 #include "thread/thread_tlvs.hpp"
 #include "thread/tmf.hpp"
-
 namespace ot {
 
 /**
@@ -127,6 +126,10 @@ class Mle : public InstanceLocator, private NonCopyable
     friend class ot::LinkMetrics::Initiator;
 #endif
     friend class ot::UnitTester;
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    friend class ot::EnhCslSender;
+    friend class ot::Mac::Mac;
+#endif
 #if OPENTHREAD_FTD
     friend class ot::TimeTicker;
     friend class Tmf::Agent;
@@ -728,15 +731,107 @@ public:
     uint64_t CalcParentCslMetric(const Mac::CslAccuracy &aCslAccuracy) const;
 
     /**
-     * Indicates whether the device is connected to a parent which supports CSL.
+     * Indicates whether the attached parent supports CSL.
      *
      * @retval TRUE   If parent supports CSL.
      * @retval FALSE  If parent does not support CSL.
      */
     bool IsCslSupported(void) const;
+
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    /**
+     * Returns whether the Thread interface is currently communicating to a WC.
+     *
+     * @retval TRUE   If the Thread interface is communicating to a WC.
+     * @retval FALSE  If the Thread interface is not communicating to a WC.
+     */
+    bool IsWakeupCoordinatorPresent() const { return mWcAttachWindow > 0; }
+
+    /**
+     * Attaches to a WC.
+     *
+     * This detaches from the current parent and initiates attachment to the WC.
+     *
+     * @param[in] aWc             The extended address of the Wakeup Coordinator.
+     * @param[in] aAttachTime     The time when Parent Requests start being sent to the WC.
+     * @param[in] aAttachWindowMs The connection window for receiving the Parent Response.
+     */
+    void AttachToWakeupCoordinator(const Mac::ExtAddress &aWc, TimeMilli aAttachTime, uint32_t aAttachWindowMs);
+
+    /**
+     * Detaches from a WC.
+     *
+     * If attached to a WC, this detaches from it and goes back to wake on radio mode.
+     *
+     * @retval kErrorNone          If detached successfully.
+     * @retval kErrorInvalidState  If device is not attached to a WC.
+     */
+    Error DetachFromWc(void);
+
+    /**
+     * This method indicates whether or not CSL parent accuracy is set.
+     *
+     * @retval TRUE   If CSL parent accuracy is set.
+     * @retval FALSE  If CSL parent accuracy is not set.
+     *
+     */
+    bool IsParentCslAccuracySet(void) const { return mIsCslParentAccuracySet; }
+
+    /**
+     * This method sets CSL parent accuracy flag.
+     *
+     * @param[in]  aIsSet  TRUE if parent CSL accuracy is set, FALSE otherwise.
+     *
+     */
+    void SetIsParentCslAccuracySet(bool aIsSet) { mIsCslParentAccuracySet = aIsSet; }
+
+#endif // OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+
 #if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    /**
+     * This method saves a pointer to the WED.
+     *
+     * @param[in] aPeer  The pointer to the WED.
+     *
+     */
+    void SetWed(Neighbor *aPeer) { mWed = aPeer; }
+
+    /**
+     * This method returns a pointer to the WED.
+     *
+     * @returns a pointer to the WED.
+     */
+    Neighbor *GetWed(void) { return mWed; }
+
+    /**
+     * This method indicates whether a WED is present.
+     *
+     * @retval TRUE   A WED is present.
+     * @retval FALSE  A WED is not present.
+     *
+     */
+    bool IsWedPresent(void) { return mWed != nullptr; }
+
+    /**
+     * This method indicates whether a WED is attaching.
+     *
+     * @retval TRUE   A WED is attaching.
+     * @retval FALSE  A WED is not attaching.
+     *
+     */
+    bool IsWedAttaching(void) { return mWedAttachState == kWedWakeUp || mWedAttachState == kWedAwaitParentRequest; }
+
+    /**
+     * This method indicates whether a WED is attached.
+     *
+     * @retval TRUE   A WED is attached.
+     * @retval FALSE  A WED is not attached.
+     *
+     */
+    bool IsWedAttached(void) { return mWedAttachState == kWedAttached || mWedAttachState == kWedDetaching; }
+
     /**
      * Attempts to wake a Wake-up End Device.
      *
@@ -755,6 +850,21 @@ public:
                  uint16_t               aDurationMs,
                  WakeupCallback         aCallback,
                  void                  *aCallbackContext);
+
+    /**
+     * This method detaches the currently attached WED.
+     *
+     * @retval kErrorNone         Successfully started the wake-up sequence.
+     * @retval kErrorInvalidState This or another device is currently being attached.
+     */
+    Error DetachWed(void);
+
+    /**
+     * This method handles the event of a frame sent to a WED.
+     *
+     * @param[in] aNeighbor  The WED.
+     */
+    void HandleSentFrameToNeighbor(Neighbor &aNeighbor);
 #endif // OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
 
 #if OPENTHREAD_FTD
@@ -1414,7 +1524,10 @@ private:
     {
         kToRouters,         // Parent Request to routers only.
         kToRoutersAndReeds, // Parent Request to all routers and REEDs.
-        kToSelectedRouter,  // Parent Request to a selected router (e.g., by `ParentSearch` module).
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+        kToWakeupCoordinator, // Parent Request unicast to a known WC device.
+#endif
+        kToSelectedRouter, // Parent Request to a selected router (e.g., by `ParentSearch` module).
     };
 
     enum ChildUpdateRequestMode : uint8_t // Used in `SendChildUpdateRequest()`
@@ -1492,6 +1605,9 @@ private:
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
         kTypeTimeSync,
 #endif
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+        kTypeParentRequestToWakeupCoordinator,
+#endif
 #if OPENTHREAD_CONFIG_P2P_ENABLE
         kTypeP2pLinkRequest,
         kTypeP2pLinkAcceptAndRequest,
@@ -1504,7 +1620,8 @@ private:
     enum WedAttachState : uint8_t
     {
         kWedDetached,
-        kWedAttaching,
+        kWedWakeUp,
+        kWedAwaitParentRequest,
         kWedAttached,
         kWedDetaching,
     };
@@ -1642,6 +1759,26 @@ private:
         Neighbor               *mNeighbor;     // Neighbor from which message was received (can be `nullptr`).
         Class                   mClass;        // The message class (authoritative, peer, or unknown).
     };
+
+    /*
+     * This method resets the attach counter.
+     *
+     */
+    void ResetAttachCounter(void);
+
+    /**
+     * This method increments the attach counter.
+     *
+     */
+    void IncrementAttachCounter(void);
+
+    /*
+     * Initialize parent candidate.
+     *
+     * @param[in] aAddress  The MAC Address of the parent candidate.
+     *
+     */
+    void InitParentCandidate(Mac::ExtAddress &aAddress);
 
     //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -1883,6 +2020,9 @@ private:
         void             Attach(AttachMode aMode);
         void             CancelAttachOnRoleChange(void);
         void             ResetAttachCounter(void) { mAttachCounter = 0; }
+        void             IncrementAttachCounter(void);
+        bool             IsTimerRunning(void) const { return mTimer.IsRunning(); }
+        TimeMilli        GetTimerFireTime(void) const { return mTimer.GetFireTime(); }
         AttachMode       GetAttachMode(void) const { return mMode; }
         ParentCandidate &GetParentCandidate(void) { return mParentCandidate; }
         void             ClearParentCandidate(void) { mParentCandidate.Clear(); }
@@ -1911,11 +2051,11 @@ private:
         };
 
         void     SetState(State aState);
-        uint32_t GetStartDelay(void) const;
+        uint32_t GetStartDelay(void);
         bool     HasAcceptableParentCandidate(void) const;
         uint32_t Reattach(void);
 
-        Error DetermineParentRequestType(ParentRequestType &aType) const;
+        Error DetermineParentRequestType(ParentRequestType &aType, uint32_t *aTimeout = nullptr) const;
         Error GetNextAnnounceChannel(uint8_t &aChannel) const;
         bool  HasMoreChannelsToAnnounce(void) const;
         void  SendParentRequest(ParentRequestType aType);
@@ -2486,10 +2626,21 @@ private:
 #if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
     WakeupTxScheduler        mWakeupTxScheduler;
     WedAttachState           mWedAttachState;
+    Neighbor                *mWed;
     WedAttachTimer           mWedAttachTimer;
     Callback<WakeupCallback> mWakeupCallback;
 #endif
 
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    DeviceRole      mPreviousRole;
+    bool            mIsCslParentAccuracySet : 1;
+    Mac::ExtAddress mWakeupCoordinator;
+    TimeMilli       mWcAttachTime;
+    uint32_t        mWcAttachWindow;
+#if OPENTHREAD_CONFIG_MLE_ATTACH_BACKOFF_ENABLE
+    TimeMilli mAttachFireTime;
+#endif
+#endif
 #if OPENTHREAD_FTD
 
     bool mRouterEligible : 1;

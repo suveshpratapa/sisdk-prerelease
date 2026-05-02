@@ -54,6 +54,15 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_MAC_CSL_WAKEUP_INTERVAL
+ *
+ * Periodicity of wake-up frame transmission by WC (in units of 10 symbols).
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_CSL_WAKEUP_INTERVAL
+#define OPENTHREAD_CONFIG_MAC_CSL_WAKEUP_INTERVAL 47
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_CONNECTION_RETRY_INTERVAL
  *
  * The Connection Retry Interval is included in the Connection IE of each wake-up frame sent by the Wake-up Coordinator
@@ -77,6 +86,28 @@
  */
 #ifndef OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_CONNECTION_RETRY_COUNT
 #define OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_CONNECTION_RETRY_COUNT 12
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_MAX_WAKEUP_COORDS
+ *
+ * The maximum number of Wake-up Coordinators on the trusted devices table.
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_MAX_WAKEUP_COORDS
+#define OPENTHREAD_CONFIG_MAC_MAX_WAKEUP_COORDS 16
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_WC_EVICT_AGE
+ *
+ * The evict age of a Wake-up Coordinator on the trusted devices table in seconds.
+ * When a proper wake-up frame is received by a Wake-on End-Device while the trusted Wake-up
+ * Coordinators table is full, it will attempt to replace the oldest entry which exceeds the
+ * evict age. If none does, the incoming wake-up frame will be ignored.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_WC_EVICT_AGE
+#define OPENTHREAD_CONFIG_MAC_WC_EVICT_AGE 3600
 #endif
 
 /**

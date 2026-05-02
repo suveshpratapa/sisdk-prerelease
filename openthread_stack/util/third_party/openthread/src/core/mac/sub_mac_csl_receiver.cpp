@@ -36,6 +36,9 @@
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
 #include "instance/instance.hpp"
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+#include "thread/mle.hpp"
+#endif
 
 namespace ot {
 namespace Mac {
@@ -44,18 +47,31 @@ RegisterLogModule("SubMac");
 
 void SubMac::CslInit(void)
 {
-    mCslPeriod          = 0;
-    mCslChannel         = 0;
-    mCslPeerShort       = 0;
+    mCslPeriod    = 0;
+    mCslChannel   = 0;
+    mCslPeerShort = 0;
+    mCslPeerExt.Clear();
     mIsCslSampling      = false;
     mCslSampleTimeRadio = 0;
     mCslSampleTimeLocal.SetValue(0);
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    mWedPresent = false;
+#endif
     mCslLastSync.SetValue(0);
     mCslTimer.Stop();
 }
 
 void SubMac::RestartCslTimerAfterSyncUpdate(void)
 {
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    // Preserve existing wake-up attach/session timing while a WC session is active.
+    // Re-arming the CSL timer on each sync update can destabilize WC/WED timing.
+    if (Get<Mle::Mle>().IsWakeupCoordinatorPresent())
+    {
+        return;
+    }
+#endif
+
     // Only applies for the case where radio supports receive timing.
     if (RadioSupportsReceiveTiming() && mCslTimer.IsRunning())
     {
@@ -79,7 +95,14 @@ void SubMac::UpdateCslLastSyncTimestamp(TxFrame &aFrame, RxFrame *aAckFrame)
     // Assuming the error here since it is bounded and has very small effect on the final window duration.
     if (aAckFrame != nullptr && aFrame.HasCslIe())
     {
-        mCslLastSync = TimeMicro(GetLocalTime());
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_LOCAL_TIME_SYNC
+        mCslLastSync = TimerMicro::GetNow();
+#else
+        // Calculate transmitted frame timestamp based on ACK timestamp
+        mCslLastSync = TimeMicro(static_cast<uint32_t>(aAckFrame->mInfo.mRxInfo.mTimestamp));
+        mCslLastSync -= kAifsDuration;
+        mCslLastSync -= aFrame.GetLength() * kOctetDuration;
+#endif
     }
 
     RestartCslTimerAfterSyncUpdate();
@@ -94,7 +117,11 @@ void SubMac::UpdateCslLastSyncTimestamp(RxFrame *aFrame, Error aError)
 #endif
 
     // Assuming the risk of the parent missing the Enh-ACK in favor of smaller CSL receive window
-    if ((mCslPeriod > 0) && aFrame->mInfo.mRxInfo.mAckedWithSecEnhAck)
+    if (((mCslPeriod > 0) && aFrame->mInfo.mRxInfo.mAckedWithSecEnhAck)
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+        || (aFrame->GetHeaderIe(CstIe::kHeaderIeId) != nullptr)
+#endif
+    )
     {
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_LOCAL_TIME_SYNC
         mCslLastSync = TimerMicro::GetNow();
@@ -109,30 +136,125 @@ exit:
     return;
 }
 
-void SubMac::SetCslParams(uint16_t aPeriod, uint8_t aChannel, ShortAddress aShortAddr, const ExtAddress &aExtAddr)
+void SubMac::CslSample(void)
+{
+#if OPENTHREAD_CONFIG_MAC_FILTER_ENABLE
+    VerifyOrExit(!mRadioFilterEnabled, IgnoreError(Get<Radio>().Sleep()));
+#endif
+
+    SetState(kStateRadioSample);
+
+    if (mIsCslSampling && !RadioSupportsReceiveTiming())
+    {
+        IgnoreError(Get<Radio>().Receive(mCslChannel));
+        ExitNow();
+    }
+
+#if !OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE
+    IgnoreError(Get<Radio>().Sleep()); // Don't actually sleep for debugging
+#endif
+
+exit:
+    return;
+}
+
+bool SubMac::UpdateCsl(uint16_t          aPeriod,
+                       uint8_t           aChannel,
+                       ShortAddress      aShortAddr,
+                       const ExtAddress &aExtAddr,
+                       uint32_t         &aSampleTime)
 {
     bool diffPeriod  = aPeriod != mCslPeriod;
     bool diffChannel = aChannel != mCslChannel;
-    bool diffPeer    = aShortAddr != mCslPeerShort;
-    bool retval      = diffPeriod || diffChannel || diffPeer;
+    bool diffShort   = aShortAddr != mCslPeerShort;
+    bool diffExt     = aExtAddr != mCslPeerExt;
+    bool diffTime    = aSampleTime != 0;
+    bool retval      = diffPeriod || diffChannel || diffShort || diffExt || diffTime;
 
     VerifyOrExit(retval);
     mCslChannel = aChannel;
 
-    VerifyOrExit(diffPeriod || diffPeer);
+    VerifyOrExit(diffPeriod || diffShort || diffExt || diffTime);
+    mCslPeriod    = aPeriod;
     mCslPeerShort = aShortAddr;
+    mCslPeerExt   = aExtAddr;
     IgnoreError(Get<Radio>().EnableCsl(aPeriod, aShortAddr, aExtAddr));
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    // TODO: Rethink API for enabling CST. For now, enable it with CSL.
+    if (mWedPresent)
+    {
+        IgnoreError(Get<Radio>().EnableCst(aPeriod, aShortAddr, &aExtAddr));
+    }
+#endif
+
+    // Only modify the sample time when CSL period or sample time change
+    VerifyOrExit(diffPeriod || diffTime);
 
     mIsCslSampling = false;
     mCslPeriod     = aPeriod;
 
     mCslTimer.Stop();
+    mIsCslSampling = false;
+
     if (mCslPeriod > 0)
     {
-        mCslSampleTimeRadio = static_cast<uint32_t>(Get<Radio>().GetNow());
-        mCslSampleTimeLocal = TimerMicro::GetNow();
+        uint32_t  radioNow = static_cast<uint32_t>(Get<Radio>().GetNow());
+        TimeMicro localNow = TimerMicro::GetNow();
 
-        HandleCslTimer();
+        // If the caller provides a sample time, retain that phase alignment and
+        // schedule the timer for the next valid sampling window.
+        if (aSampleTime != 0)
+        {
+            uint32_t timeAhead;
+            uint32_t timeAfter;
+            uint32_t periodUs = mCslPeriod * kUsPerTenSymbols;
+
+            OT_UNUSED_VARIABLE(timeAfter);
+            GetCslWindowEdges(timeAhead, timeAfter);
+            mCslSampleTimeRadio =
+                (TimeMicro::SoonestPeriodicEvent(TimeMicro(radioNow), TimeMicro(aSampleTime) - timeAhead, periodUs) +
+                 timeAhead)
+                    .GetValue();
+        }
+        else
+        {
+            mCslSampleTimeRadio = radioNow;
+        }
+
+        // Translate radio-domain sample time to local-domain sample time for timer scheduling.
+        if (mCslSampleTimeRadio >= radioNow)
+        {
+            mCslSampleTimeLocal = localNow + (mCslSampleTimeRadio - radioNow);
+        }
+        else
+        {
+            mCslSampleTimeLocal = localNow - (radioNow - mCslSampleTimeRadio);
+        }
+        mIsCslSampling = false;
+
+        if (aSampleTime != 0)
+        {
+            uint32_t timeAhead;
+            uint32_t timeAfter;
+
+            OT_UNUSED_VARIABLE(timeAfter);
+            GetCslWindowEdges(timeAhead, timeAfter);
+
+            Get<Radio>().UpdateCslSampleTime(mCslSampleTimeRadio);
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+            // Keep CST phase aligned with CSL during startup when WED is present.
+            if (mWedPresent)
+            {
+                uint32_t periodUs = mCslPeriod * kUsPerTenSymbols;
+                Get<Radio>().UpdateCstSampleTime(mCslSampleTimeRadio + periodUs / 2);
+            }
+#endif
+            mCslTimer.Start(mCslSampleTimeLocal - timeAhead - localNow);
+        }
+        else
+        {
+            HandleCslTimer();
+        }
     }
     else if (!RadioSupportsReceiveTiming())
     {
@@ -140,7 +262,8 @@ void SubMac::SetCslParams(uint16_t aPeriod, uint8_t aChannel, ShortAddress aShor
     }
 
 exit:
-    return;
+    aSampleTime = mCslSampleTimeRadio;
+    return retval;
 }
 
 void SubMac::HandleCslTimer(Timer &aTimer) { aTimer.Get<SubMac>().HandleCslTimer(); }
@@ -191,12 +314,21 @@ void SubMac::HandleCslReceiveAt(uint32_t aTimeAhead, uint32_t aTimeAfter)
     mCslSampleTimeLocal += periodUs;
 
     Get<Radio>().UpdateCslSampleTime(mCslSampleTimeRadio);
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+    // TODO: Rethink API for configuring CST. For now, set CST sample time to CSL sample time + period/2
+    if (mWedPresent)
+    {
+        Get<Radio>().UpdateCstSampleTime(mCslSampleTimeRadio + periodUs / 2);
+    }
+#endif
 
     // Schedule reception window for any state except RX - so that CSL RX Window has lower priority
     // than scanning or RX after the data poll.
     if ((mState != kStateDisabled) && (mState != kStateReceive))
     {
-        IgnoreError(Get<Radio>().ReceiveAt(mCslChannel, winStart, winDuration));
+        mCslWinStart = winStart;
+        mCslWinDur   = winDuration;
+        IgnoreError(Get<Radio>().ReceiveAt(mCslChannel, winStart, winDuration, kCslSlotId));
     }
 
     LogCslWindow(winStart, winDuration);
@@ -215,6 +347,55 @@ void SubMac::HandleCslReceiveOrSleep(uint32_t aTimeAhead, uint32_t aTimeAfter)
      *       |------------|---------------------------------------|------------|---------------------------------------|
      *          sample                   sleep                        sample                    sleep
      */
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    // For non-WC sessions, use legacy CSL sample/sleep arbitration behavior.
+    if (!Get<Mle::Mle>().IsWakeupCoordinatorPresent())
+#endif
+    {
+        if (mIsCslSampling)
+        {
+            mIsCslSampling = false;
+            mCslTimer.FireAt(mCslSampleTimeLocal - aTimeAhead);
+            if (mState == kStateRadioSample)
+            {
+#if !OPENTHREAD_CONFIG_MAC_CSL_DEBUG_ENABLE
+                IgnoreError(Get<Radio>().Sleep()); // Don't actually sleep for debugging
+#endif
+                LogDebg("CSL sleep %lu", ToUlong(mCslTimer.GetNow().GetValue()));
+            }
+        }
+        else
+        {
+            uint32_t periodUs = mCslPeriod * kUsPerTenSymbols;
+            uint32_t winStart;
+            uint32_t winDuration;
+
+            mCslTimer.FireAt(mCslSampleTimeLocal + aTimeAfter);
+            mIsCslSampling = true;
+            winStart       = TimerMicro::GetNow().GetValue();
+            winDuration    = aTimeAhead + aTimeAfter;
+
+            mCslSampleTimeRadio += periodUs;
+            mCslSampleTimeLocal += periodUs;
+
+            Get<Radio>().UpdateCslSampleTime(mCslSampleTimeRadio);
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+            // TODO: Rethink API for configuring CST. For now, set CST sample time to CSL sample time + period/2
+            if (mWedPresent)
+            {
+                Get<Radio>().UpdateCstSampleTime(mCslSampleTimeRadio + periodUs / 2);
+            }
+#endif
+            if (mState == kStateRadioSample)
+            {
+                IgnoreError(Get<Radio>().Receive(mCslChannel));
+            }
+
+            LogCslWindow(winStart, winDuration);
+        }
+
+        return;
+    }
 
     if (mIsCslSampling)
     {
@@ -240,6 +421,13 @@ void SubMac::HandleCslReceiveOrSleep(uint32_t aTimeAhead, uint32_t aTimeAfter)
         mCslSampleTimeLocal += periodUs;
 
         Get<Radio>().UpdateCslSampleTime(mCslSampleTimeRadio);
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+        // TODO: Rethink API for configuring CST. For now, set CST sample time to CSL sample time + period/2
+        if (mWedPresent)
+        {
+            Get<Radio>().UpdateCstSampleTime(mCslSampleTimeRadio + periodUs / 2);
+        }
+#endif
 
         LogCslWindow(winStart, winDuration);
     }
@@ -285,6 +473,10 @@ uint32_t SubMac::GetLocalTime(void)
 
     return now;
 }
+
+#if OPENTHREAD_CONFIG_WAKEUP_COORDINATOR_ENABLE
+void SubMac::WedPresent(bool aPresent) { mWedPresent = aPresent; }
+#endif
 
 #if OT_SHOULD_LOG_AT(OT_LOG_LEVEL_DEBG)
 void SubMac::LogCslWindow(uint32_t aWinStart, uint32_t aWinDuration)

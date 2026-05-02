@@ -75,8 +75,48 @@ void SubMac::UpdateWakeupListening(bool aEnable, uint32_t aInterval, uint32_t aD
 
 void SubMac::HandleWedTimer(Timer &aTimer) { aTimer.Get<SubMac>().HandleWedTimer(); }
 
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+uint16_t SubMac::GetNeededShift(uint32_t aCslStart)
+{
+    // Apply margin to every edge
+    uint32_t x1 = mWedSampleTime.GetValue() - kWakeupOverlapMargin;
+    uint32_t x2 = mWedSampleTime.GetValue() + mWakeupListenDuration + kWakeupOverlapMargin;
+    uint32_t y1 = aCslStart - kWakeupOverlapMargin;
+    uint32_t y2 = aCslStart + mCslWinDur + kWakeupOverlapMargin;
+
+    if (x2 < y1 || y2 < x1)
+    {
+        // WED:                                   x1-#####################################-x2
+        // CSL:   y1-################-y2
+        return 0;
+    }
+    else
+    {
+        // WED:              x1-#####################################-x2
+        // CSL:   y1-################-y2
+        //
+        // WED:   x1-#####################################-x2
+        // CSL:                                  y1-################-y2
+        return y2 - x1;
+    }
+}
+#endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+
 void SubMac::HandleWedTimer(void)
 {
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+    // Shift WED receive slot if it overlaps with regular CSL receive windows
+
+    // Shift will come either from the overlap with the currently scheduled CSL slot or with the next one, but
+    // not from both (thus we can sum here assuming one is 0)
+    uint16_t shift = GetNeededShift(mCslWinStart) + GetNeededShift(mCslWinStart + mCslPeriod * kUsPerTenSymbols);
+    if (shift)
+    {
+        mWedSampleTime += shift;
+        LogDebg("WED slot delayed %u us", shift);
+    }
+#endif
+
     if (RadioSupportsReceiveTiming())
     {
         HandleWedReceiveAt();
@@ -95,8 +135,8 @@ void SubMac::HandleWedReceiveAt(void)
 
     if (mState != kStateDisabled)
     {
-        IgnoreError(
-            Get<Radio>().ReceiveAt(mWakeupChannel, static_cast<uint32_t>(mWedSampleTimeRadio), mWakeupListenDuration));
+        IgnoreError(Get<Radio>().ReceiveAt(mWakeupChannel, static_cast<uint32_t>(mWedSampleTimeRadio),
+                                           mWakeupListenDuration, kWakeupSlotId));
     }
 }
 

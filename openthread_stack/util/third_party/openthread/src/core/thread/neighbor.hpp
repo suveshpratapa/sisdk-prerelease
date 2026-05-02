@@ -53,6 +53,7 @@
 #include "radio/radio.hpp"
 #include "radio/trel_link.hpp"
 #include "thread/csl_tx_scheduler.hpp"
+#include "thread/enh_csl_sender.hpp"
 #include "thread/indirect_sender.hpp"
 #include "thread/link_metrics_types.hpp"
 #include "thread/link_quality.hpp"
@@ -75,6 +76,10 @@ class Neighbor : public InstanceLocatorInit
 #if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
     ,
                  public Trel::NeighborInfo
+#endif
+#if OPENTHREAD_CONFIG_WAKEUP_END_DEVICE_ENABLE
+    ,
+                 public EnhCslSender::EnhCslPeerInfo
 #endif
 {
 public:
@@ -775,7 +780,7 @@ class CslNeighbor : public Neighbor
                     public IndirectSender::NeighborInfo,
                     public DataPollHandler::NeighborInfo
 #endif
-#if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
+#if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     ,
                     public CslTxScheduler::NeighborInfo
 #endif

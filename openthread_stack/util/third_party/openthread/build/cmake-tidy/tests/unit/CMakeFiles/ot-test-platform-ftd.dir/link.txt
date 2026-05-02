@@ -1,0 +1,2 @@
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ar qc libot-test-platform-ftd.a "CMakeFiles/ot-test-platform-ftd.dir/test_platform.cpp.o" "CMakeFiles/ot-test-platform-ftd.dir/test_util.cpp.o"
+/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ranlib libot-test-platform-ftd.a
